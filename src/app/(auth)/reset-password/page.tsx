@@ -1,0 +1,257 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { Alert, Button, Card, Field, PasswordInput } from "@/components/ui";
+import { SchoolCodeCard } from "@/components/school-code-card";
+import { apiRequest, rememberSchoolCode } from "@/lib/api";
+import { useToast } from "@/components/toast";
+import { AUTH, ROUTES } from "@/lib/endpoints";
+import {
+  hasErrors,
+  password as passwordValidator,
+  validateAll,
+} from "@/lib/validation";
+import type { ApiError } from "@/lib/types";
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
+  );
+}
+
+function ResetPasswordForm() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const { toast } = useToast();
+  const token = (params.get("token") ?? "").trim();
+  const schoolCode = (
+    params.get("schoolCode") ??
+    params.get("school") ??
+    ""
+  ).trim();
+
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    password?: string;
+    confirm?: string;
+  }>({});
+
+  const linkInvalid = !token || !schoolCode;
+
+  // Scrub token + schoolCode from the visible URL once read.
+  useEffect(() => {
+    if (linkInvalid) return;
+    if (typeof window === "undefined") return;
+    if (window.location.search) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [linkInvalid]);
+
+  const mismatch = useMemo(
+    () => confirm.length > 0 && password !== confirm,
+    [password, confirm],
+  );
+  const tooShort = password.length > 0 && password.length < 8;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    const errors = validateAll(
+      { password, confirm },
+      {
+        password: (v) => (!v ? "Password is required." : passwordValidator(v)),
+        confirm: (v) =>
+          v === password ? undefined : "Passwords do not match.",
+      },
+    );
+    setFieldErrors(errors);
+    if (hasErrors(errors)) return;
+
+    setSubmitting(true);
+    try {
+      await apiRequest(AUTH.resetPassword, {
+        method: "POST",
+        body: { token, newPassword: password },
+        query: { token },
+        schoolCode,
+        auth: false,
+      });
+      rememberSchoolCode(schoolCode);
+      toast({
+        title: "Password reset",
+        description: "You can now sign in with your new password.",
+        variant: "success",
+      });
+      setDone(true);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      const fallback =
+        apiErr.status === 401
+          ? "This reset link is no longer valid. It may have already been used or expired. Request a new password reset email."
+          : "Could not reset password.";
+      setError(apiErr.message?.trim() || fallback);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (done) {
+    return (
+      <Card className="p-8">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+            aria-hidden
+          >
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+        <h1 className="text-center text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+          Password updated
+        </h1>
+        <p className="mx-auto mt-2 max-w-sm text-center text-sm text-zinc-500 dark:text-zinc-400">
+          Sign in with your new password to continue.
+        </p>
+        <div className="mt-6">
+          <SchoolCodeCard code={schoolCode} />
+        </div>
+        <Button
+          onClick={() =>
+            router.replace(
+              `${ROUTES.login}?school=${encodeURIComponent(schoolCode)}`,
+            )
+          }
+          size="lg"
+          className="mt-6 w-full"
+        >
+          Continue to sign in
+        </Button>
+      </Card>
+    );
+  }
+
+  if (linkInvalid) {
+    return (
+      <Card className="p-8">
+        <Alert variant="error" title="This link is invalid">
+          The reset link is missing required information. Request a new
+          password reset email and try again.
+        </Alert>
+        <Link
+          href={ROUTES.forgotPassword}
+          className="mt-6 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+        >
+          Request a new link
+        </Link>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+          Reset password
+        </h1>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Choose a new password for your account.
+        </p>
+        <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+          School code:{" "}
+          <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
+            {schoolCode}
+          </span>
+        </p>
+      </div>
+
+      {error ? (
+        <div className="mb-4">
+          <Alert variant="error" title="Reset failed">
+            {error}
+          </Alert>
+        </div>
+      ) : null}
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <Field
+          label="New password"
+          htmlFor="password"
+          required
+          hint={
+            !tooShort && !fieldErrors.password
+              ? "Use at least 8 characters."
+              : undefined
+          }
+          error={
+            fieldErrors.password ??
+            (tooShort ? "Password must be at least 8 characters." : undefined)
+          }
+        >
+          <PasswordInput
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+            autoFocus
+            invalid={tooShort || !!fieldErrors.password}
+            aria-invalid={tooShort || !!fieldErrors.password || undefined}
+          />
+        </Field>
+        <Field
+          label="Confirm password"
+          htmlFor="confirm"
+          required
+          error={
+            fieldErrors.confirm ??
+            (mismatch ? "Passwords do not match." : undefined)
+          }
+        >
+          <PasswordInput
+            id="confirm"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            required
+            invalid={mismatch || !!fieldErrors.confirm}
+            aria-invalid={mismatch || !!fieldErrors.confirm || undefined}
+          />
+        </Field>
+
+        <Button
+          type="submit"
+          loading={submitting}
+          size="lg"
+          className="mt-2 w-full"
+        >
+          {submitting ? "Resetting…" : "Reset password"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        <Link
+          href={ROUTES.login}
+          className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+        >
+          Back to sign in
+        </Link>
+      </p>
+    </Card>
+  );
+}
