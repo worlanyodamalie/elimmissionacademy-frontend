@@ -1,12 +1,12 @@
 
 import type { ApiError } from "./types";
 
-const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const RAW_API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL;
 
 if (!RAW_API_BASE_URL) {
   // Fail fast at module load so a misconfigured deploy is obvious.
   throw new Error(
-    "NEXT_PUBLIC_API_BASE_URL is not set. Copy .env.example to .env.local and configure it.",
+    "NEXT_PUBLIC_BACKEND_API_BASE_URL is not set. Copy .env.example to .env.local and configure it.",
   );
 }
 
@@ -119,8 +119,6 @@ export async function apiRequest<T = unknown>(
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const fullPath = `${API_BASE_URL}${cleanPath}`;
-  // Allow API_BASE_URL to be a same-origin path (e.g. "/api/proxy") for
-  // CORS-safe development, or a fully-qualified URL for direct backend calls.
   const base =
     typeof window !== "undefined" ? window.location.origin : "http://localhost";
   const url = new URL(fullPath, base);

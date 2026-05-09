@@ -1,6 +1,6 @@
 // Single source of truth for backend endpoints used by the dashboard.
 // All callers should import from here so renames or environment changes are
-// trivial. Paths are relative to NEXT_PUBLIC_API_BASE_URL.
+// trivial. Paths are relative to NEXT_PUBLIC_BACKEND_API_BASE_URL.
 //
 // Documentation for the full URL surface (app routes + API endpoints) lives at
 // `docs/URLS.md`.

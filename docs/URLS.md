@@ -8,25 +8,17 @@ truth) so reviewers don't need to grep.
 
 ## Configuration
 
-| Variable                    | Scope        | Purpose                                                                     | Default                                                                      |
-| --------------------------- | ------------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_BASE_URL`  | browser      | Base URL the browser uses for API calls. **Required.** Trailing slash trimmed at runtime. Defaults to the same-origin proxy. | `/api/proxy`                                                                |
-| `NEXT_PUBLIC_APP_NAME`      | browser      | Optional human-readable app name.                                           | `Elim Mission Academy`                                                       |
-| `BACKEND_API_BASE_URL`      | server only  | The real backend the `/api/proxy` route forwards to. Required while the proxy is in use. | `https://school-management-system-application.onrender.com/api/v1`           |
+| Variable                            | Scope   | Purpose                                                                                                  | Example                                                            |
+| ----------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `NEXT_PUBLIC_BACKEND_API_BASE_URL`  | browser | Base URL the browser uses for API calls. **Required.** Trailing slash trimmed at runtime.                | `https://school-management-system-application.onrender.com/api/v1` |
+| `NEXT_PUBLIC_APP_NAME`              | browser | Optional human-readable app name.                                                                        | `Elim Mission Academy`                                             |
 
 Local development reads these from `.env.local` (gitignored). Copy
 `.env.example` to get started.
 
-### Why a proxy?
-
-The backend doesn't currently send `Access-Control-Allow-Origin` for our
-origin, so the browser blocks direct calls. We work around this by routing
-all browser traffic through `/api/proxy/<path>`, which is implemented as a
-Next.js Route Handler at `src/app/api/proxy/[...path]/route.ts`. Because
-that handler runs on the Next.js server, the request to the backend is a
-server-to-server call and CORS doesn't apply. If/when the backend adds CORS,
-you can point `NEXT_PUBLIC_API_BASE_URL` directly at the backend and stop
-using the proxy.
+The browser calls the backend directly, so the backend must include the
+deployed origin (and `http://localhost:3000` for local dev) in its
+`Access-Control-Allow-Origin` allowlist.
 
 ## App routes (frontend)
 
@@ -53,7 +45,7 @@ These are the Next.js routes a user can visit in the browser.
 
 ## API endpoints (backend)
 
-All paths are relative to `NEXT_PUBLIC_API_BASE_URL`. Headers:
+All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 
 - `X-School-Code: <code>` — required for every multi-tenant call.
 - `Authorization: Bearer <jwt>` — required for protected calls (handled by `apiRequest`).

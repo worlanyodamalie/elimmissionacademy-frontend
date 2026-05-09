@@ -29,7 +29,7 @@ with [`URLS.md`](./URLS.md) for the route + endpoint reference.
                                          ▼
                          ┌──────────────────────────────────────┐
                          │ Backend API                          │
-                         │ NEXT_PUBLIC_API_BASE_URL/...         │
+                         │ NEXT_PUBLIC_BACKEND_API_BASE_URL/... │
                          └──────────────────────────────────────┘
 ```
 
@@ -252,32 +252,22 @@ Network failures throw a regular `TypeError`; pages display a generic
 
 ## 7. Configuration
 
-| Variable                    | Scope       | Required | Default       | Purpose                                                                                   |
-| --------------------------- | ----------- | -------- | ------------- | ----------------------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_BASE_URL`  | browser     | yes      | `/api/proxy`  | Base path for browser API calls. Throws at module load if missing.                        |
-| `NEXT_PUBLIC_APP_NAME`      | browser     | no       | "Elim Mission Academy" | Display name for the UI.                                                          |
-| `BACKEND_API_BASE_URL`      | server only | yes\*    | —             | Real backend URL the `/api/proxy` handler forwards to. \*Required while the proxy is in use. |
+| Variable                            | Scope   | Required | Purpose                                                                |
+| ----------------------------------- | ------- | -------- | ---------------------------------------------------------------------- |
+| `NEXT_PUBLIC_BACKEND_API_BASE_URL`  | browser | yes      | Backend API base URL. Throws at module load if missing.                |
+| `NEXT_PUBLIC_APP_NAME`              | browser | no       | Display name for the UI.                                               |
 
 `.env.example` is committed; `.env.local` is gitignored. No tokens, no school
 codes, no test credentials are checked in.
 
-### Same-origin proxy
+### CORS
 
-`src/app/api/proxy/[...path]/route.ts` forwards every browser request to the
-real backend on the server side. The browser only ever talks to its own
-origin, so CORS never enters the picture. The proxy:
-
-1. Strips `/api/proxy` from the URL.
-2. Forwards method, headers (minus hop-by-hop), query string, and body to
-   `${BACKEND_API_BASE_URL}/<rest>`.
-3. Streams the upstream response straight back, status and headers preserved.
-4. Returns `502` if the upstream `fetch` itself throws.
-5. Is marked `dynamic = "force-dynamic"` so nothing is cached — auth tokens
-   and request bodies must never leak between users.
-
-If the backend later adds CORS for your origin, set
-`NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1` and the proxy
-becomes inert (still present, just unused).
+The browser calls the backend directly. The backend must allow each origin
+the dashboard is served from (`http://localhost:3000` for local dev, plus
+the production and Vercel preview URLs) in its
+`Access-Control-Allow-Origin` allowlist, allow the headers we send
+(`Authorization`, `Content-Type`, `X-School-Code`), and respond `2xx` to
+`OPTIONS` preflight.
 
 ---
 
