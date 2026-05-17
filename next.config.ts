@@ -7,14 +7,26 @@ import type { NextConfig } from "next";
 // Note: a fully nonce-based script-src would be stricter still, but requires
 // middleware-generated nonces. We can move there later — this is already a
 // massive improvement over no policy.
+function backendOrigin(): string | null {
+  const raw = process.env.NEXT_PUBLIC_BACKEND_API_BASE_URL;
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
 function buildCsp(isDev: boolean): string {
   const scriptSrc = isDev
     ? "'self' 'unsafe-inline' 'unsafe-eval'"
     : "'self' 'unsafe-inline'";
   const styleSrc = "'self' 'unsafe-inline'"; // Tailwind / inline styles
-  const connectSrc = isDev
-    ? "'self' ws: wss:" // HMR websocket
-    : "'self'";
+  const apiOrigin = backendOrigin();
+  const connectParts = ["'self'"];
+  if (apiOrigin) connectParts.push(apiOrigin);
+  if (isDev) connectParts.push("ws:", "wss:"); // HMR websocket
+  const connectSrc = connectParts.join(" ");
   return [
     "default-src 'self'",
     `script-src ${scriptSrc}`,
