@@ -9,6 +9,7 @@ import { ROUTES } from "@/lib/endpoints";
 import { cn, formatRoleLabel, getInitials } from "@/lib/utils";
 import {
   AdminIcon,
+  CalendarIcon,
   CloseIcon,
   HeadTeacherIcon,
   HomeIcon,
@@ -55,6 +56,12 @@ const NAV: NavItem[] = [
     label: "Administrators",
     description: "Other admin accounts",
     icon: AdminIcon,
+  },
+  {
+    href: ROUTES.academics,
+    label: "Academics",
+    description: "Academic years and terms",
+    icon: CalendarIcon,
   },
 ];
 
