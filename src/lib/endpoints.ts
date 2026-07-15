@@ -15,11 +15,23 @@ export const AUTH = {
 
 export const USERS = {
   students: "/auth/users/students",
+  parentsLookup: "/auth/users/parents/lookup",
   teachers: "/auth/users/teachers",
   headTeachers: "/auth/users/head-teachers",
   admins: "/auth/users/admins",
   setupPassword: "/auth/users/setup-password",
   resendOnboarding: "/auth/users/resend-onboarding",
+  // Role-specific profile (student/parent/teacher/head-teacher/admin).
+  // Takes the profile's public UUID, not the numeric *ProfileId fields that
+  // appear inside profile responses. Response shape depends on the role.
+  profile: (profilePublicId: string) => `/auth/users/${profilePublicId}/profile`,
+} as const;
+
+export const ACADEMICS = {
+  years: "/school/academics/years",
+  year: (publicId: string) => `/school/academics/years/${publicId}`,
+  terms: "/school/academics/terms",
+  term: (publicId: string) => `/school/academics/terms/${publicId}`,
 } as const;
 
 // App routes (used by Link / router.push). Keeping them here lets us refactor
@@ -41,4 +53,5 @@ export const ROUTES = {
   newHeadTeacher: "/dashboard/head-teachers/new",
   admins: "/dashboard/admins",
   newAdmin: "/dashboard/admins/new",
+  academics: "/dashboard/academics",
 } as const;

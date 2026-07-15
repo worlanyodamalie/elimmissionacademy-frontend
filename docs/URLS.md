@@ -42,6 +42,7 @@ These are the Next.js routes a user can visit in the browser.
 | `/dashboard/head-teachers/new`     | Add a head teacher.                                           | authenticated admin |
 | `/dashboard/admins`                | Administrators hub + resend onboarding tool.                  | authenticated admin |
 | `/dashboard/admins/new`            | Add another administrator.                                    | authenticated admin |
+| `/dashboard/academics`             | Manage academic years and terms.                              | authenticated admin |
 
 ## API endpoints (backend)
 
@@ -65,11 +66,24 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 | Constant                   | Method | Path                                | Body / params                                                                                        | Notes                                       |
 | -------------------------- | ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `USERS.students`           | POST   | `/auth/users/students`              | `{ student: {...}, parents: [...] }`                                                                 | Enrolls a student and links parents.        |
-| `USERS.teachers`           | POST   | `/auth/users/teachers`              | Staff payload                                                                                        | Adds a classroom teacher.                   |
-| `USERS.headTeachers`       | POST   | `/auth/users/head-teachers`         | Staff payload                                                                                        | Adds a head teacher.                        |
-| `USERS.admins`             | POST   | `/auth/users/admins`                | Staff payload                                                                                        | Adds another admin.                         |
+| `USERS.parentsLookup`      | GET    | `/auth/users/parents/lookup`        | Query `?query=&page=&size=`                                                                          | Searches existing parents (paginated).      |
+| `USERS.teachers`           | POST   | `/auth/users/teachers`              | `StaffPayload` (teacher profile)                                                                     | Adds a classroom teacher.                   |
+| `USERS.headTeachers`       | POST   | `/auth/users/head-teachers`         | `StaffPayload` (head-teacher profile)                                                                | Adds a head teacher.                        |
+| `USERS.admins`             | POST   | `/auth/users/admins`                | `StaffPayload` (admin profile)                                                                       | Adds another admin.                         |
 | `USERS.setupPassword`      | POST   | `/auth/users/setup-password`        | `{ token, newPassword }`                                                                             | Invited users set their initial password.   |
 | `USERS.resendOnboarding`   | POST   | `/auth/users/resend-onboarding?email=...` | Query string only.                                                                              | Re-issues an onboarding link.               |
+| `USERS.profile(id)`        | GET    | `/auth/users/{profileId}/profile`   | Path param only.                                                                                     | Role-specific profile (student/parent/teacher/head-teacher/admin). |
+
+### Academics (admin only)
+
+| Constant                   | Method | Path                                | Body / params                                                                                        | Notes                                       |
+| -------------------------- | ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `ACADEMICS.years`          | POST   | `/school/academics/years`           | `AcademicYearRequest`                                                                                | Creates an academic year.                   |
+| `ACADEMICS.years`          | GET    | `/school/academics/years`           | Query `?page=&size=&sort=`                                                                           | Paginated years (default sort: startDate).  |
+| `ACADEMICS.year(publicId)` | GET    | `/school/academics/years/{publicId}` | Path param only.                                                                                    | Single academic year.                       |
+| `ACADEMICS.terms`          | POST   | `/school/academics/terms`           | `AcademicTermRequest` (needs numeric `academicYearId`)                                               | Creates a term under a year.                |
+| `ACADEMICS.terms`          | GET    | `/school/academics/terms`           | Query `?page=&size=&sort=`                                                                           | Paginated terms.                            |
+| `ACADEMICS.term(publicId)` | GET    | `/school/academics/terms/{publicId}` | Path param only.                                                                                    | Single term.                                |
 
 ### Payload shapes
 
@@ -78,9 +92,13 @@ duplicate every field here.
 
 - `SchoolRegistrationPayload` — `{ school, admin }`
 - `LoginPayload` — `{ login, password }`
-- `StaffPayload` — admin / teacher / head-teacher creation body
-- `StudentPayload` — `{ student, parents: ParentPayload[] }`
-- `ParentPayload` — relation, contact, address, pickup permission
+- `StaffPayload` — `{ email, mobileNumber, isExistingUser, personalDetails?, profileDetails }`;
+  `profileDetails` is role-specific (`TeacherProfileDetails` /
+  `HeadTeacherProfileDetails` / `AdminProfileDetails`)
+- `StudentPayload` — `{ student, parents: StudentParentEntry[] }`
+- `StudentParentEntry` — `{ existingParent, newParent }` (exactly one set)
+- `ParentRelationship` — relation type, custody, contact preferences, permissions
+- `ParentSummary` / `PageResponse<T>` — parent lookup result row and page wrapper
 
 ## Cross-cutting concerns
 
