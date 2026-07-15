@@ -6,9 +6,11 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Field,
   Input,
   Select,
+  Textarea,
 } from "./ui";
 import { AddressFields, EMPTY_ADDRESS } from "./address-fields";
 import { apiRequest } from "@/lib/api";
@@ -19,17 +21,95 @@ import {
   phone as phoneValidator,
   validateAll,
 } from "@/lib/validation";
-import type { Address, ApiError, Gender, StaffPayload } from "@/lib/types";
+import type {
+  Address,
+  AdminLevel,
+  AdminStatus,
+  ApiError,
+  EmploymentType,
+  Gender,
+  HeadTeacherPosition,
+  HeadTeacherStatus,
+  StaffPayload,
+  StaffProfileDetails,
+} from "@/lib/types";
+
+export type StaffRole = "teacher" | "head-teacher" | "admin";
 
 type Props = {
   endpoint: string;
+  role: StaffRole;
   roleLabel: string;
   successDescription?: string;
   redirectTo?: string;
 };
 
+const EMPLOYMENT_TYPES: { value: EmploymentType; label: string }[] = [
+  { value: "FULL_TIME", label: "Full-time" },
+  { value: "PART_TIME", label: "Part-time" },
+  { value: "CONTRACT", label: "Contract" },
+];
+
+const HEAD_TEACHER_POSITIONS: { value: HeadTeacherPosition; label: string }[] =
+  [
+    { value: "MAIN", label: "Main" },
+    { value: "ASSISTANT", label: "Assistant" },
+    { value: "ACADEMIC", label: "Academic" },
+    { value: "DOMESTIC", label: "Domestic" },
+  ];
+
+const HEAD_TEACHER_STATUSES: { value: HeadTeacherStatus; label: string }[] = [
+  { value: "ACTIVE", label: "Active" },
+  { value: "INACTIVE", label: "Inactive" },
+  { value: "RETIRED", label: "Retired" },
+  { value: "ON_LEAVE", label: "On leave" },
+  { value: "SUSPENDED", label: "Suspended" },
+  { value: "TERMINATED", label: "Terminated" },
+];
+
+const ADMIN_LEVELS: { value: AdminLevel; label: string }[] = [
+  { value: "MAIN", label: "Main" },
+  { value: "ACADEMIC", label: "Academic" },
+  { value: "TRANSPORTATION", label: "Transportation" },
+  { value: "FEEDING", label: "Feeding" },
+  { value: "FINANCIAL", label: "Financial" },
+];
+
+const ADMIN_STATUSES: { value: AdminStatus; label: string }[] = [
+  { value: "ACTIVE", label: "Active" },
+  { value: "INACTIVE", label: "Inactive" },
+  { value: "SUSPENDED", label: "Suspended" },
+  { value: "REVOKED", label: "Revoked" },
+];
+
+const DATE_LABELS: Record<StaffRole, string> = {
+  teacher: "Date employed",
+  "head-teacher": "Date appointed",
+  admin: "Date assigned",
+};
+
+const EMPTY_FORM = {
+  firstName: "",
+  lastName: "",
+  otherNames: "",
+  email: "",
+  mobileNumber: "",
+  gender: "MALE" as Gender,
+};
+
+const EMPTY_PROFILE = {
+  qualificationsText: "",
+  employmentType: "FULL_TIME" as EmploymentType,
+  position: "MAIN" as HeadTeacherPosition,
+  headTeacherStatus: "ACTIVE" as HeadTeacherStatus,
+  adminLevel: "MAIN" as AdminLevel,
+  adminStatus: "ACTIVE" as AdminStatus,
+  date: "",
+};
+
 export function StaffForm({
   endpoint,
+  role,
   roleLabel,
   successDescription,
   redirectTo,
@@ -38,14 +118,9 @@ export function StaffForm({
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    otherNames: "",
-    email: "",
-    mobileNumber: "",
-    gender: "MALE" as Gender,
-  });
+  const [isExistingUser, setIsExistingUser] = useState(false);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [address, setAddress] = useState<Address>(EMPTY_ADDRESS);
   const [fieldErrors, setFieldErrors] = useState<{
     firstName?: string;
@@ -55,37 +130,101 @@ export function StaffForm({
     region?: string;
     city?: string;
     street?: string;
+    qualifications?: string;
+    date?: string;
   }>({});
+
+  const needsQualifications = role === "teacher" || role === "head-teacher";
+  const dateLabel = DATE_LABELS[role];
 
   function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  function updateProfile<K extends keyof typeof profile>(
+    key: K,
+    value: (typeof profile)[K],
+  ) {
+    setProfile((p) => ({ ...p, [key]: value }));
+  }
+
+  function parseQualifications(): string[] {
+    return profile.qualificationsText
+      .split("\n")
+      .map((q) => q.trim())
+      .filter(Boolean);
+  }
+
+  function buildProfileDetails(): StaffProfileDetails {
+    if (role === "teacher") {
+      return {
+        qualifications: parseQualifications(),
+        employmentType: profile.employmentType,
+        dateEmployed: profile.date,
+      };
+    }
+    if (role === "head-teacher") {
+      return {
+        position: profile.position,
+        qualifications: parseQualifications(),
+        status: profile.headTeacherStatus,
+        dateAppointed: profile.date,
+      };
+    }
+    return {
+      adminLevel: profile.adminLevel,
+      profileStatus: profile.adminStatus,
+      dateAssigned: profile.date,
+    };
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    const errors = validateAll(
+    const requiredText = (label: string) => (v: string) =>
+      v.trim() ? undefined : `${label} is required.`;
+
+    const errors: typeof fieldErrors = validateAll(
       {
-        firstName: form.firstName,
-        lastName: form.lastName,
         email: form.email,
         mobileNumber: form.mobileNumber,
-        region: address.region,
-        city: address.city,
-        street: address.street,
+        date: profile.date,
       },
       {
-        firstName: (v) => (v.trim() ? undefined : "First name is required."),
-        lastName: (v) => (v.trim() ? undefined : "Last name is required."),
         email: (v) => (!v.trim() ? "Email is required." : emailValidator(v)),
         mobileNumber: (v) =>
           !v.trim() ? "Mobile number is required." : phoneValidator(v),
-        region: (v) => (v.trim() ? undefined : "Region is required."),
-        city: (v) => (v.trim() ? undefined : "City is required."),
-        street: (v) => (v.trim() ? undefined : "Street is required."),
+        date: requiredText(dateLabel),
       },
     );
+
+    if (!isExistingUser) {
+      Object.assign(
+        errors,
+        validateAll(
+          {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            region: address.region,
+            city: address.city,
+            street: address.street,
+          },
+          {
+            firstName: requiredText("First name"),
+            lastName: requiredText("Last name"),
+            region: requiredText("Region"),
+            city: requiredText("City"),
+            street: requiredText("Street"),
+          },
+        ),
+      );
+    }
+
+    if (needsQualifications && parseQualifications().length === 0) {
+      errors.qualifications = "Add at least one qualification.";
+    }
+
     setFieldErrors(errors);
     if (hasErrors(errors)) {
       setError("Please fix the highlighted fields and try again.");
@@ -95,13 +234,19 @@ export function StaffForm({
     setSubmitting(true);
     try {
       const payload: StaffPayload = {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        otherNames: form.otherNames.trim() || undefined,
         email: form.email.trim(),
         mobileNumber: form.mobileNumber.trim(),
-        gender: form.gender,
-        address,
+        isExistingUser,
+        personalDetails: isExistingUser
+          ? undefined
+          : {
+              firstName: form.firstName.trim(),
+              lastName: form.lastName.trim(),
+              otherNames: form.otherNames.trim() || undefined,
+              gender: form.gender,
+              address,
+            },
+        profileDetails: buildProfileDetails(),
       };
       await apiRequest(endpoint, {
         method: "POST",
@@ -111,21 +256,18 @@ export function StaffForm({
         title: `${roleLabel} added`,
         description:
           successDescription ??
-          `${form.firstName} ${form.lastName} will receive an onboarding email.`,
+          (isExistingUser
+            ? `The ${roleLabel.toLowerCase()} role has been added to the existing account.`
+            : `${form.firstName} ${form.lastName} will receive an onboarding email.`),
         variant: "success",
       });
       setFieldErrors({});
       if (redirectTo) router.push(redirectTo);
       else {
-        setForm({
-          firstName: "",
-          lastName: "",
-          otherNames: "",
-          email: "",
-          mobileNumber: "",
-          gender: "MALE",
-        });
+        setForm(EMPTY_FORM);
+        setProfile(EMPTY_PROFILE);
         setAddress(EMPTY_ADDRESS);
+        setIsExistingUser(false);
       }
     } catch (err) {
       const apiErr = err as ApiError;
@@ -149,60 +291,38 @@ export function StaffForm({
         <section className="flex flex-col gap-4">
           <header>
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              Personal details
+              Account
             </h2>
           </header>
+          <Checkbox
+            label="This person already has an account"
+            description="Link the new role to an existing user by email instead of creating a new account."
+            checked={isExistingUser}
+            onChange={(e) => setIsExistingUser(e.target.checked)}
+          />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
-              label="First name"
-              htmlFor="firstName"
+              label="Email"
+              htmlFor="email"
               required
-              error={fieldErrors.firstName}
+              hint={
+                fieldErrors.email
+                  ? undefined
+                  : isExistingUser
+                    ? "The email of the existing account."
+                    : "Used to send the onboarding link."
+              }
+              error={fieldErrors.email}
             >
               <Input
-                id="firstName"
-                value={form.firstName}
-                onChange={(e) => update("firstName", e.target.value)}
-                autoComplete="given-name"
+                id="email"
+                type="email"
+                value={form.email}
+                onChange={(e) => update("email", e.target.value)}
+                autoComplete="email"
                 required
-                invalid={!!fieldErrors.firstName}
+                invalid={!!fieldErrors.email}
               />
-            </Field>
-            <Field
-              label="Last name"
-              htmlFor="lastName"
-              required
-              error={fieldErrors.lastName}
-            >
-              <Input
-                id="lastName"
-                value={form.lastName}
-                onChange={(e) => update("lastName", e.target.value)}
-                autoComplete="family-name"
-                required
-                invalid={!!fieldErrors.lastName}
-              />
-            </Field>
-            <Field
-              label="Other names"
-              htmlFor="otherNames"
-              className="sm:col-span-2"
-            >
-              <Input
-                id="otherNames"
-                value={form.otherNames}
-                onChange={(e) => update("otherNames", e.target.value)}
-              />
-            </Field>
-            <Field label="Gender" htmlFor="gender" required>
-              <Select
-                id="gender"
-                value={form.gender}
-                onChange={(e) => update("gender", e.target.value as Gender)}
-              >
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-              </Select>
             </Field>
             <Field
               label="Mobile number"
@@ -221,46 +341,230 @@ export function StaffForm({
                 invalid={!!fieldErrors.mobileNumber}
               />
             </Field>
-            <Field
-              label="Email"
-              htmlFor="email"
-              required
-              hint={
-                fieldErrors.email
-                  ? undefined
-                  : "Used to send the onboarding link."
-              }
-              error={fieldErrors.email}
-              className="sm:col-span-2"
-            >
-              <Input
-                id="email"
-                type="email"
-                value={form.email}
-                onChange={(e) => update("email", e.target.value)}
-                autoComplete="email"
-                required
-                invalid={!!fieldErrors.email}
-              />
-            </Field>
           </div>
         </section>
+
+        {!isExistingUser ? (
+          <>
+            <section className="flex flex-col gap-4">
+              <header>
+                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                  Personal details
+                </h2>
+              </header>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field
+                  label="First name"
+                  htmlFor="firstName"
+                  required
+                  error={fieldErrors.firstName}
+                >
+                  <Input
+                    id="firstName"
+                    value={form.firstName}
+                    onChange={(e) => update("firstName", e.target.value)}
+                    autoComplete="given-name"
+                    required
+                    invalid={!!fieldErrors.firstName}
+                  />
+                </Field>
+                <Field
+                  label="Last name"
+                  htmlFor="lastName"
+                  required
+                  error={fieldErrors.lastName}
+                >
+                  <Input
+                    id="lastName"
+                    value={form.lastName}
+                    onChange={(e) => update("lastName", e.target.value)}
+                    autoComplete="family-name"
+                    required
+                    invalid={!!fieldErrors.lastName}
+                  />
+                </Field>
+                <Field
+                  label="Other names"
+                  htmlFor="otherNames"
+                  className="sm:col-span-2"
+                >
+                  <Input
+                    id="otherNames"
+                    value={form.otherNames}
+                    onChange={(e) => update("otherNames", e.target.value)}
+                  />
+                </Field>
+                <Field label="Gender" htmlFor="gender" required>
+                  <Select
+                    id="gender"
+                    value={form.gender}
+                    onChange={(e) => update("gender", e.target.value as Gender)}
+                  >
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                  </Select>
+                </Field>
+              </div>
+            </section>
+
+            <section className="flex flex-col gap-4">
+              <header>
+                <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                  Address
+                </h2>
+              </header>
+              <AddressFields
+                value={address}
+                onChange={setAddress}
+                errors={{
+                  region: fieldErrors.region,
+                  city: fieldErrors.city,
+                  street: fieldErrors.street,
+                }}
+              />
+            </section>
+          </>
+        ) : null}
 
         <section className="flex flex-col gap-4">
           <header>
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-              Address
+              {roleLabel} profile
             </h2>
           </header>
-          <AddressFields
-            value={address}
-            onChange={setAddress}
-            errors={{
-              region: fieldErrors.region,
-              city: fieldErrors.city,
-              street: fieldErrors.street,
-            }}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {role === "teacher" ? (
+              <Field label="Employment type" htmlFor="employmentType" required>
+                <Select
+                  id="employmentType"
+                  value={profile.employmentType}
+                  onChange={(e) =>
+                    updateProfile(
+                      "employmentType",
+                      e.target.value as EmploymentType,
+                    )
+                  }
+                >
+                  {EMPLOYMENT_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
+            {role === "head-teacher" ? (
+              <>
+                <Field label="Position" htmlFor="position" required>
+                  <Select
+                    id="position"
+                    value={profile.position}
+                    onChange={(e) =>
+                      updateProfile(
+                        "position",
+                        e.target.value as HeadTeacherPosition,
+                      )
+                    }
+                  >
+                    {HEAD_TEACHER_POSITIONS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Status" htmlFor="htStatus" required>
+                  <Select
+                    id="htStatus"
+                    value={profile.headTeacherStatus}
+                    onChange={(e) =>
+                      updateProfile(
+                        "headTeacherStatus",
+                        e.target.value as HeadTeacherStatus,
+                      )
+                    }
+                  >
+                    {HEAD_TEACHER_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </>
+            ) : null}
+            {role === "admin" ? (
+              <>
+                <Field label="Admin level" htmlFor="adminLevel" required>
+                  <Select
+                    id="adminLevel"
+                    value={profile.adminLevel}
+                    onChange={(e) =>
+                      updateProfile("adminLevel", e.target.value as AdminLevel)
+                    }
+                  >
+                    {ADMIN_LEVELS.map((l) => (
+                      <option key={l.value} value={l.value}>
+                        {l.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Status" htmlFor="adminStatus" required>
+                  <Select
+                    id="adminStatus"
+                    value={profile.adminStatus}
+                    onChange={(e) =>
+                      updateProfile(
+                        "adminStatus",
+                        e.target.value as AdminStatus,
+                      )
+                    }
+                  >
+                    {ADMIN_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </>
+            ) : null}
+            <Field
+              label={dateLabel}
+              htmlFor="profileDate"
+              required
+              error={fieldErrors.date}
+            >
+              <Input
+                id="profileDate"
+                type="date"
+                value={profile.date}
+                onChange={(e) => updateProfile("date", e.target.value)}
+                required
+                invalid={!!fieldErrors.date}
+              />
+            </Field>
+            {needsQualifications ? (
+              <Field
+                label="Qualifications"
+                htmlFor="qualifications"
+                required
+                hint="One per line, e.g. BSc Mathematics."
+                error={fieldErrors.qualifications}
+                className="sm:col-span-2"
+              >
+                <Textarea
+                  id="qualifications"
+                  value={profile.qualificationsText}
+                  onChange={(e) =>
+                    updateProfile("qualificationsText", e.target.value)
+                  }
+                  rows={3}
+                />
+              </Field>
+            ) : null}
+          </div>
         </section>
 
         <div className="flex flex-col-reverse items-stretch gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-end">
