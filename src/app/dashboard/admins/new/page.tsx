@@ -29,6 +29,7 @@ export default function NewAdminPage() {
       />
       <StaffForm
         endpoint={USERS.admins}
+        role="admin"
         roleLabel="Administrator"
         redirectTo={ROUTES.admins}
       />

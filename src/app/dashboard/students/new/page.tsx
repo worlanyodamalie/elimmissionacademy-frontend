@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Badge,
@@ -33,46 +33,78 @@ import {
 import type {
   Address,
   ApiError,
+  CustodyType,
   Gender,
-  ParentPayload,
+  PageResponse,
+  ParentRelationship,
+  ParentSummary,
+  PreferredContactMethod,
   RelationType,
+  StudentParentEntry,
   StudentPayload,
 } from "@/lib/types";
 
 type ParentDraft = {
+  mode: "new" | "existing";
+  selectedParent: ParentSummary | null;
   firstName: string;
   lastName: string;
   otherNames: string;
   email: string;
   mobileNumber: string;
-  gender: Gender;
   relationType: RelationType;
   isPrimaryContact: boolean;
   hasPickupPermission: boolean;
-  address: Address;
-  copyStudentAddress: boolean;
+  hasFinancialResponsibility: boolean;
+  custodyType: CustodyType;
+  custodyNotes: string;
+  preferredContactMethods: PreferredContactMethod[];
 };
 
 const RELATIONS: { value: RelationType; label: string }[] = [
-  { value: "FATHER", label: "Father" },
   { value: "MOTHER", label: "Mother" },
+  { value: "FATHER", label: "Father" },
+  { value: "STEP_MOTHER", label: "Step-mother" },
+  { value: "STEP_FATHER", label: "Step-father" },
   { value: "GUARDIAN", label: "Guardian" },
-  { value: "OTHER", label: "Other" },
+  { value: "UNCLE", label: "Uncle" },
+  { value: "AUNT", label: "Aunt" },
+  { value: "GRANDPARENT", label: "Grandparent" },
+  { value: "FOSTER_PARENT", label: "Foster parent" },
+  { value: "ADOPTIVE_PARENT", label: "Adoptive parent" },
+];
+
+const CUSTODY_TYPES: { value: CustodyType; label: string }[] = [
+  { value: "PRIMARY", label: "Primary" },
+  { value: "JOINT", label: "Joint" },
+  { value: "WEEKEND", label: "Weekend" },
+  { value: "SUPERVISED", label: "Supervised" },
+  { value: "NONE", label: "None" },
+];
+
+const CONTACT_METHODS: { value: PreferredContactMethod; label: string }[] = [
+  { value: "PHONE_CALL", label: "Phone call" },
+  { value: "SMS", label: "SMS" },
+  { value: "EMAIL", label: "Email" },
+  { value: "WHATSAPP", label: "WhatsApp" },
 ];
 
 function emptyParent(primary = false): ParentDraft {
   return {
+    mode: "new",
+    selectedParent: null,
     firstName: "",
     lastName: "",
     otherNames: "",
     email: "",
     mobileNumber: "",
-    gender: "FEMALE",
     relationType: "MOTHER",
     isPrimaryContact: primary,
     hasPickupPermission: true,
-    address: { ...EMPTY_ADDRESS },
-    copyStudentAddress: true,
+    hasFinancialResponsibility: primary,
+    custodyType: primary ? "PRIMARY" : "JOINT",
+    custodyNotes: "",
+    preferredContactMethods: ["PHONE_CALL"],
   };
 }
 
@@ -86,7 +118,9 @@ export default function NewStudentPage() {
     otherNames: "",
     gender: "MALE" as Gender,
     dateOfBirth: "",
+    admissionDate: "",
     previousSchoolName: "",
+    medicalNotes: "",
     hasSpecialNeeds: false,
     specialNeedsDetails: "",
   });
@@ -99,18 +133,18 @@ export default function NewStudentPage() {
     firstName?: string;
     lastName?: string;
     dateOfBirth?: string;
+    admissionDate?: string;
     region?: string;
     city?: string;
     street?: string;
   };
   type ParentErrors = {
+    parentId?: string;
     firstName?: string;
     lastName?: string;
     email?: string;
     mobileNumber?: string;
-    region?: string;
-    city?: string;
-    street?: string;
+    preferredContactMethods?: string;
   };
   const [studentErrors, setStudentErrors] = useState<StudentErrors>({});
   const [parentErrors, setParentErrors] = useState<ParentErrors[]>([{}]);
@@ -161,6 +195,7 @@ export default function NewStudentPage() {
         firstName: student.firstName,
         lastName: student.lastName,
         dateOfBirth: student.dateOfBirth,
+        admissionDate: student.admissionDate,
         region: studentAddress.region,
         city: studentAddress.city,
         street: studentAddress.street,
@@ -172,6 +207,8 @@ export default function NewStudentPage() {
           !v
             ? "Date of birth is required."
             : dateNotInFuture("Date of birth")(v),
+        admissionDate: (v) =>
+          v ? undefined : "Admission date is required.",
         region: (v) => (v.trim() ? undefined : "Region is required."),
         city: (v) => (v.trim() ? undefined : "City is required."),
         street: (v) => (v.trim() ? undefined : "Street is required."),
@@ -179,29 +216,39 @@ export default function NewStudentPage() {
     );
 
     const pErrs: ParentErrors[] = parents.map((p) => {
-      const errs = validateAll(
-        {
-          firstName: p.firstName,
-          lastName: p.lastName,
-          email: p.email,
-          mobileNumber: p.mobileNumber,
-          region: p.copyStudentAddress ? "ok" : p.address.region,
-          city: p.copyStudentAddress ? "ok" : p.address.city,
-          street: p.copyStudentAddress ? "ok" : p.address.street,
-        },
-        {
-          firstName: (v) => (v.trim() ? undefined : "First name is required."),
-          lastName: (v) => (v.trim() ? undefined : "Last name is required."),
-          email: (v) =>
-            !v.trim() ? "Email is required." : emailValidator(v),
-          mobileNumber: (v) =>
-            !v.trim() ? "Mobile number is required." : phoneValidator(v),
-          region: (v) => (v.trim() ? undefined : "Region is required."),
-          city: (v) => (v.trim() ? undefined : "City is required."),
-          street: (v) => (v.trim() ? undefined : "Street is required."),
-        },
-      );
-      return errs as ParentErrors;
+      const errs: ParentErrors = {};
+      if (p.mode === "existing") {
+        if (!p.selectedParent) {
+          errs.parentId = "Search for and select a parent.";
+        }
+      } else {
+        Object.assign(
+          errs,
+          validateAll(
+            {
+              firstName: p.firstName,
+              lastName: p.lastName,
+              email: p.email,
+              mobileNumber: p.mobileNumber,
+            },
+            {
+              firstName: (v) =>
+                v.trim() ? undefined : "First name is required.",
+              lastName: (v) =>
+                v.trim() ? undefined : "Last name is required.",
+              email: (v) =>
+                !v.trim() ? "Email is required." : emailValidator(v),
+              mobileNumber: (v) =>
+                !v.trim() ? "Mobile number is required." : phoneValidator(v),
+            },
+          ),
+        );
+      }
+      if (p.preferredContactMethods.length === 0) {
+        errs.preferredContactMethods =
+          "Select at least one contact method.";
+      }
+      return errs;
     });
 
     setStudentErrors(sErr as StudentErrors);
@@ -217,18 +264,38 @@ export default function NewStudentPage() {
 
     setSubmitting(true);
     try {
-      const parentPayloads: ParentPayload[] = parents.map((p) => ({
-        firstName: p.firstName.trim(),
-        lastName: p.lastName.trim(),
-        otherNames: p.otherNames.trim() || undefined,
-        email: p.email.trim(),
-        mobileNumber: p.mobileNumber.trim(),
-        gender: p.gender,
-        relationType: p.relationType,
-        isPrimaryContact: p.isPrimaryContact,
-        hasPickupPermission: p.hasPickupPermission,
-        address: p.copyStudentAddress ? studentAddress : p.address,
-      }));
+      const parentEntries: StudentParentEntry[] = parents.map((p, i) => {
+        const relationship: ParentRelationship = {
+          relationType: p.relationType,
+          isPrimaryContact: p.isPrimaryContact,
+          hasPickupPermission: p.hasPickupPermission,
+          hasFinancialResponsibility: p.hasFinancialResponsibility,
+          emergencyContactOrder: i + 1,
+          custodyType: p.custodyType,
+          custodyNotes: p.custodyNotes.trim() || null,
+          preferredContactMethods: p.preferredContactMethods,
+        };
+        if (p.mode === "existing" && p.selectedParent) {
+          return {
+            existingParent: {
+              parentId: p.selectedParent.parentId,
+              relationship,
+            },
+            newParent: null,
+          };
+        }
+        return {
+          existingParent: null,
+          newParent: {
+            firstName: p.firstName.trim(),
+            lastName: p.lastName.trim(),
+            otherNames: p.otherNames.trim() || undefined,
+            email: p.email.trim(),
+            mobileNumber: p.mobileNumber.trim(),
+            relationship,
+          },
+        };
+      });
 
       const payload: StudentPayload = {
         student: {
@@ -237,14 +304,16 @@ export default function NewStudentPage() {
           otherNames: student.otherNames.trim() || undefined,
           gender: student.gender,
           dateOfBirth: student.dateOfBirth,
+          admissionDate: student.admissionDate,
           address: studentAddress,
           previousSchoolName: student.previousSchoolName.trim() || undefined,
+          medicalNotes: student.medicalNotes.trim() || null,
           hasSpecialNeeds: student.hasSpecialNeeds,
           specialNeedsDetails: student.hasSpecialNeeds
             ? student.specialNeedsDetails.trim() || null
             : null,
         },
-        parents: parentPayloads,
+        parents: parentEntries,
       };
 
       await apiRequest(USERS.students, {
@@ -382,10 +451,26 @@ export default function NewStudentPage() {
               />
             </Field>
             <Field
+              label="Admission date"
+              htmlFor="s-admission"
+              required
+              error={studentErrors.admissionDate}
+            >
+              <Input
+                id="s-admission"
+                type="date"
+                value={student.admissionDate}
+                onChange={(e) =>
+                  setStudent({ ...student, admissionDate: e.target.value })
+                }
+                required
+                invalid={!!studentErrors.admissionDate}
+              />
+            </Field>
+            <Field
               label="Previous school"
               htmlFor="s-prev"
               hint="If transferring from another school"
-              className="sm:col-span-2"
             >
               <Input
                 id="s-prev"
@@ -396,6 +481,21 @@ export default function NewStudentPage() {
                     previousSchoolName: e.target.value,
                   })
                 }
+              />
+            </Field>
+            <Field
+              label="Medical notes"
+              htmlFor="s-medical"
+              hint="Allergies, medication, or conditions staff should know about."
+              className="sm:col-span-2"
+            >
+              <Textarea
+                id="s-medical"
+                value={student.medicalNotes}
+                onChange={(e) =>
+                  setStudent({ ...student, medicalNotes: e.target.value })
+                }
+                rows={3}
               />
             </Field>
             <div className="sm:col-span-2">
@@ -439,9 +539,6 @@ export default function NewStudentPage() {
             <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
               Student address
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Parents who live at the same address can copy this when added below.
-            </p>
           </header>
           <AddressFields
             value={studentAddress}
@@ -463,6 +560,7 @@ export default function NewStudentPage() {
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Add at least one. Mark exactly one as the primary contact.
+                Their order below sets the emergency contact order.
               </p>
             </div>
             <Button
@@ -522,13 +620,12 @@ function ParentBlock({
   index: number;
   parent: ParentDraft;
   errors: {
+    parentId?: string;
     firstName?: string;
     lastName?: string;
     email?: string;
     mobileNumber?: string;
-    region?: string;
-    city?: string;
-    street?: string;
+    preferredContactMethods?: string;
   };
   canRemove: boolean;
   onUpdate: (patch: Partial<ParentDraft>) => void;
@@ -536,6 +633,16 @@ function ParentBlock({
   onRemove: () => void;
 }) {
   const id = (k: string) => `p${index}-${k}`;
+
+  function toggleContactMethod(method: PreferredContactMethod) {
+    const has = parent.preferredContactMethods.includes(method);
+    onUpdate({
+      preferredContactMethods: has
+        ? parent.preferredContactMethods.filter((m) => m !== method)
+        : [...parent.preferredContactMethods, method],
+    });
+  }
+
   return (
     <div className="rounded-xl border border-zinc-200 p-5 dark:border-zinc-800">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -572,46 +679,102 @@ function ParentBlock({
         </div>
       </div>
 
+      <div className="mb-4">
+        <Checkbox
+          label="This parent already has an account"
+          description="Link an existing parent by their ID instead of creating a new account."
+          checked={parent.mode === "existing"}
+          onChange={(e) =>
+            onUpdate({ mode: e.target.checked ? "existing" : "new" })
+          }
+        />
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field
-          label="First name"
-          htmlFor={id("first")}
-          required
-          error={errors.firstName}
-        >
-          <Input
-            id={id("first")}
-            value={parent.firstName}
-            onChange={(e) => onUpdate({ firstName: e.target.value })}
-            required
-            invalid={!!errors.firstName}
-          />
-        </Field>
-        <Field
-          label="Last name"
-          htmlFor={id("last")}
-          required
-          error={errors.lastName}
-        >
-          <Input
-            id={id("last")}
-            value={parent.lastName}
-            onChange={(e) => onUpdate({ lastName: e.target.value })}
-            required
-            invalid={!!errors.lastName}
-          />
-        </Field>
-        <Field
-          label="Other names"
-          htmlFor={id("other")}
-          className="sm:col-span-2"
-        >
-          <Input
-            id={id("other")}
-            value={parent.otherNames}
-            onChange={(e) => onUpdate({ otherNames: e.target.value })}
-          />
-        </Field>
+        {parent.mode === "existing" ? (
+          <div className="sm:col-span-2">
+            <ParentLookup
+              inputId={id("parent-search")}
+              selected={parent.selectedParent}
+              error={errors.parentId}
+              onSelect={(selectedParent) => onUpdate({ selectedParent })}
+            />
+          </div>
+        ) : (
+          <>
+            <Field
+              label="First name"
+              htmlFor={id("first")}
+              required
+              error={errors.firstName}
+            >
+              <Input
+                id={id("first")}
+                value={parent.firstName}
+                onChange={(e) => onUpdate({ firstName: e.target.value })}
+                required
+                invalid={!!errors.firstName}
+              />
+            </Field>
+            <Field
+              label="Last name"
+              htmlFor={id("last")}
+              required
+              error={errors.lastName}
+            >
+              <Input
+                id={id("last")}
+                value={parent.lastName}
+                onChange={(e) => onUpdate({ lastName: e.target.value })}
+                required
+                invalid={!!errors.lastName}
+              />
+            </Field>
+            <Field
+              label="Other names"
+              htmlFor={id("other")}
+              className="sm:col-span-2"
+            >
+              <Input
+                id={id("other")}
+                value={parent.otherNames}
+                onChange={(e) => onUpdate({ otherNames: e.target.value })}
+              />
+            </Field>
+            <Field
+              label="Email"
+              htmlFor={id("email")}
+              required
+              error={errors.email}
+            >
+              <Input
+                id={id("email")}
+                type="email"
+                value={parent.email}
+                onChange={(e) => onUpdate({ email: e.target.value })}
+                required
+                invalid={!!errors.email}
+              />
+            </Field>
+            <Field
+              label="Mobile number"
+              htmlFor={id("phone")}
+              required
+              error={errors.mobileNumber}
+            >
+              <Input
+                id={id("phone")}
+                type="tel"
+                value={parent.mobileNumber}
+                onChange={(e) => onUpdate({ mobileNumber: e.target.value })}
+                required
+                placeholder="+233241112223"
+                invalid={!!errors.mobileNumber}
+              />
+            </Field>
+          </>
+        )}
+
         <Field label="Relationship" htmlFor={id("rel")} required>
           <Select
             id={id("rel")}
@@ -627,76 +790,217 @@ function ParentBlock({
             ))}
           </Select>
         </Field>
-        <Field label="Gender" htmlFor={id("gender")} required>
+        <Field label="Custody type" htmlFor={id("custody")} required>
           <Select
-            id={id("gender")}
-            value={parent.gender}
-            onChange={(e) => onUpdate({ gender: e.target.value as Gender })}
+            id={id("custody")}
+            value={parent.custodyType}
+            onChange={(e) =>
+              onUpdate({ custodyType: e.target.value as CustodyType })
+            }
           >
-            <option value="MALE">Male</option>
-            <option value="FEMALE">Female</option>
+            {CUSTODY_TYPES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
           </Select>
         </Field>
         <Field
-          label="Email"
-          htmlFor={id("email")}
-          required
-          error={errors.email}
+          label="Custody notes"
+          htmlFor={id("custody-notes")}
+          hint="Optional details about the custody arrangement."
+          className="sm:col-span-2"
         >
-          <Input
-            id={id("email")}
-            type="email"
-            value={parent.email}
-            onChange={(e) => onUpdate({ email: e.target.value })}
-            required
-            invalid={!!errors.email}
-          />
-        </Field>
-        <Field
-          label="Mobile number"
-          htmlFor={id("phone")}
-          required
-          error={errors.mobileNumber}
-        >
-          <Input
-            id={id("phone")}
-            type="tel"
-            value={parent.mobileNumber}
-            onChange={(e) => onUpdate({ mobileNumber: e.target.value })}
-            required
-            placeholder="+233241112223"
-            invalid={!!errors.mobileNumber}
+          <Textarea
+            id={id("custody-notes")}
+            value={parent.custodyNotes}
+            onChange={(e) => onUpdate({ custodyNotes: e.target.value })}
+            rows={2}
           />
         </Field>
       </div>
 
       <div className="mt-4 flex flex-col gap-3">
-        <Checkbox
-          label="Lives at the same address as the student"
-          checked={parent.copyStudentAddress}
-          onChange={(e) => onUpdate({ copyStudentAddress: e.target.checked })}
-        />
-        {!parent.copyStudentAddress ? (
-          <div className="rounded-lg border border-dashed border-zinc-200 p-4 dark:border-zinc-800">
-            <AddressFields
-              value={parent.address}
-              onChange={(addr) => onUpdate({ address: addr })}
-              idPrefix={`parent${index}`}
-              errors={{
-                region: errors.region,
-                city: errors.city,
-                street: errors.street,
-              }}
-            />
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            Preferred contact methods{" "}
+            <span className="text-rose-600 dark:text-rose-400">*</span>
+          </legend>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {CONTACT_METHODS.map((m) => (
+              <Checkbox
+                key={m.value}
+                label={m.label}
+                checked={parent.preferredContactMethods.includes(m.value)}
+                onChange={() => toggleContactMethod(m.value)}
+              />
+            ))}
           </div>
-        ) : null}
+          {errors.preferredContactMethods ? (
+            <p className="mt-1 text-xs text-rose-600 dark:text-rose-400">
+              {errors.preferredContactMethods}
+            </p>
+          ) : null}
+        </fieldset>
         <Checkbox
           label="Allowed to pick up the student"
           description="Authorize this parent or guardian to pick up the student from school."
           checked={parent.hasPickupPermission}
           onChange={(e) => onUpdate({ hasPickupPermission: e.target.checked })}
         />
+        <Checkbox
+          label="Financially responsible"
+          description="This parent or guardian is responsible for fees and billing."
+          checked={parent.hasFinancialResponsibility}
+          onChange={(e) =>
+            onUpdate({ hasFinancialResponsibility: e.target.checked })
+          }
+        />
       </div>
     </div>
+  );
+}
+
+const LOOKUP_DEBOUNCE_MS = 300;
+const LOOKUP_PAGE_SIZE = 8;
+
+function ParentLookup({
+  inputId,
+  selected,
+  error,
+  onSelect,
+}: {
+  inputId: string;
+  selected: ParentSummary | null;
+  error?: string;
+  onSelect: (parent: ParentSummary | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<ParentSummary[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  function handleQueryChange(value: string) {
+    setQuery(value);
+    setSearchError(null);
+    if (value.trim().length < 2) {
+      setResults([]);
+      setSearched(false);
+      setSearching(false);
+    }
+  }
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const page = await apiRequest<
+          PageResponse<ParentSummary & { id?: number }>
+        >(USERS.parentsLookup, {
+          query: { query: q, page: "0", size: String(LOOKUP_PAGE_SIZE) },
+          signal: controller.signal,
+        });
+        setResults(
+          (page?.content ?? []).map((r) => ({
+            ...r,
+            // Tolerate either `parentId` or a generic `id` in lookup rows.
+            parentId: r.parentId ?? r.id ?? 0,
+          })),
+        );
+        setSearched(true);
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          setResults([]);
+          setSearched(true);
+          setSearchError(
+            (err as ApiError).message ?? "Could not search parents.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setSearching(false);
+      }
+    }, LOOKUP_DEBOUNCE_MS);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [query]);
+
+  if (selected) {
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            {selected.firstName} {selected.lastName}
+          </p>
+          <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+            {selected.email} · {selected.mobileNumber}
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => onSelect(null)}
+        >
+          Change
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <Field
+      label="Find parent"
+      htmlFor={inputId}
+      required
+      hint="Search by name, email, or mobile number."
+      error={error}
+    >
+      <div className="flex flex-col gap-2">
+        <Input
+          id={inputId}
+          type="search"
+          value={query}
+          onChange={(e) => handleQueryChange(e.target.value)}
+          placeholder="e.g. Ama, ama@example.com, +2332…"
+          invalid={!!error}
+        />
+        {searching ? (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Searching…</p>
+        ) : searchError ? (
+          <p className="text-xs text-rose-600 dark:text-rose-400">
+            {searchError}
+          </p>
+        ) : searched && results.length === 0 ? (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            No parents matched your search.
+          </p>
+        ) : results.length > 0 ? (
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+            {results.map((r) => (
+              <li key={r.parentId}>
+                <button
+                  type="button"
+                  onClick={() => onSelect(r)}
+                  className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                >
+                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {r.firstName} {r.lastName}
+                  </span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {r.email} · {r.mobileNumber}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </Field>
   );
 }

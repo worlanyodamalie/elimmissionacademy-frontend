@@ -29,6 +29,7 @@ export default function NewHeadTeacherPage() {
       />
       <StaffForm
         endpoint={USERS.headTeachers}
+        role="head-teacher"
         roleLabel="Head teacher"
         redirectTo={ROUTES.headTeachers}
       />
