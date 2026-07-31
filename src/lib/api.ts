@@ -102,7 +102,8 @@ export function decodeJwt(token: string): Record<string, unknown> | null {
 export type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   body?: unknown;
-  query?: Record<string, string | undefined>;
+  // Array values are appended as repeated params (Spring's `sort=a,asc&sort=b`).
+  query?: Record<string, string | string[] | undefined>;
   schoolCode?: string;
   token?: string;
   auth?: boolean;
@@ -124,7 +125,13 @@ export async function apiRequest<T = unknown>(
   const url = new URL(fullPath, base);
   if (options.query) {
     for (const [k, v] of Object.entries(options.query)) {
-      if (v !== undefined && v !== "") url.searchParams.set(k, v);
+      if (Array.isArray(v)) {
+        for (const item of v) {
+          if (item !== undefined && item !== "") url.searchParams.append(k, item);
+        }
+      } else if (v !== undefined && v !== "") {
+        url.searchParams.set(k, v);
+      }
     }
   }
 

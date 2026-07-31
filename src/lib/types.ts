@@ -427,6 +427,384 @@ export type AdminProfile = {
   status: AdminStatus;
 };
 
+// ---------------------------------------------------------------------------
+// Billing & collections
+// ---------------------------------------------------------------------------
+
+// Note the backend spells the euro code "EURO", not the ISO "EUR".
+export type Currency = "GHS" | "USD" | "EURO" | "GBP";
+
+export type ServiceCategory =
+  | "SCHOOL_FEES"
+  | "EXTRA_CLASSES"
+  | "TRANSPORTATION"
+  | "FEEDING"
+  | "UNIFORM"
+  | "BOOKS"
+  | "GRADUATION"
+  | "EXAMINATION";
+
+export type BillingCycle =
+  | "DAILY"
+  | "WEEKLY"
+  | "MONTHLY"
+  | "TERMLY"
+  | "ANNUALLY"
+  | "ONE_TIME";
+
+// Bill/line-item settlement state (distinct from PaymentStatus below).
+export type BillPaymentStatus = "PAID" | "UNPAID" | "PARTIALLY_PAID" | "VOID";
+
+export type BillLineItemSource = "SYSTEM_GENERATED" | "SERVICE_COST" | "MANUAL";
+
+export type ServiceCostStatus = "ACTIVE" | "INACTIVE";
+
+export type FullName = {
+  firstName?: string;
+  lastName?: string;
+  otherNames?: string | null;
+};
+
+export type ServiceCostRequest = {
+  serviceCostName: string;
+  serviceCostDescription?: string;
+  // Omit to price the service for every class level.
+  classLevelId?: number;
+  serviceCategory: ServiceCategory;
+  billingCycle: BillingCycle;
+  amount: number;
+  currency: Currency;
+  priorityOrder?: number;
+  mandatory?: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+};
+
+export type ServiceCostResponse = {
+  publicId: string;
+  schoolId: number;
+  schoolName: string;
+  classLevelId?: number | null;
+  classLevelName?: string | null;
+  serviceCostName: string;
+  serviceCostDescription?: string | null;
+  serviceCategory: ServiceCategory;
+  billingCycle: BillingCycle;
+  amount: number;
+  currency: Currency;
+  status: ServiceCostStatus;
+  mandatory: boolean;
+  priorityOrder?: number;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+  createdByName?: string;
+  lastModifiedByName?: string | null;
+};
+
+export type StudentBillRequest = {
+  studentId: number;
+  academicTermId: number;
+};
+
+export type StudentBillResponse = {
+  publicId: string;
+  billNumber: string;
+  schoolId: number;
+  schoolName: string;
+  studentId: number;
+  studentName: string;
+  academicTermId: number;
+  academicTermName: string;
+  academicYearId: number;
+  academicYearName: string;
+  issueDate: string;
+  dueDate?: string | null;
+  currency: Currency;
+  totalAmount: number;
+  totalDiscount: number;
+  totalPaid: number;
+  totalBalanceDue: number;
+  paymentStatus: BillPaymentStatus;
+  billLineItems: BillLineItemResponse[];
+  createdById?: number;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type BillLineItemResponse = {
+  billLineItemId: string;
+  schoolId: number;
+  schoolName: string;
+  serviceCostId?: number | null;
+  serviceName: string;
+  serviceCategory: ServiceCategory;
+  billingCycle: BillingCycle;
+  currency: Currency;
+  studentBillId: number;
+  unitCost: number;
+  quantity: number;
+  totalCost: number;
+  amountDue: number;
+  amountPaid: number;
+  balanceDue: number;
+  paymentStatus: BillPaymentStatus;
+  dueDate?: string | null;
+  createdById?: number;
+  createdByName?: FullName;
+  createdAt: string;
+};
+
+// Priced from an existing service cost — the amount comes from the price list.
+export type AutomaticBillLineItemRequest = {
+  serviceCostId: number;
+  studentBillId: number;
+  quantity: number;
+  dueDate?: string;
+};
+
+// Ad-hoc charge; requires a reason for the audit trail.
+export type ManualBillLineItemRequest = {
+  studentBillId: number;
+  serviceName: string;
+  serviceCategory: ServiceCategory;
+  billingCycle: BillingCycle;
+  unitCost: number;
+  quantity: number;
+  currency: Currency;
+  manualReason: string;
+  dueDate?: string;
+};
+
+// Flattened onto the query string, one param per field.
+export type BillLineItemFilter = {
+  studentBillId?: string;
+  studentId?: string;
+  paymentStatus?: BillPaymentStatus;
+  serviceCategory?: ServiceCategory;
+  source?: BillLineItemSource;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+};
+
+export type PaymentMethod =
+  | "CASH"
+  | "MOBILE_MONEY"
+  | "CARD_PAYMENT"
+  | "CHEQUE"
+  | "BANK_TRANSFER";
+
+export type PaymentChannel =
+  | "CASH_OFFICE"
+  | "MTN_MOMO"
+  | "VODAFONE_CASH"
+  | "AIRTEL_TIGO_MONEY"
+  | "BANK"
+  | "CHEQUE"
+  | "PAYSTACK"
+  | "OTHER";
+
+export type PaymentStatus =
+  | "PENDING"
+  | "CONFIRMED"
+  | "SUCCESSFUL"
+  | "FAILED"
+  | "REVERSED";
+
+export type AllocationStatus = "APPLIED" | "REVERSED" | "ADJUSTED";
+
+export type PaymentRequest = {
+  schoolId: number;
+  studentId: number;
+  parentId?: number;
+  payeeName?: string;
+  payeeRelationship?: string;
+  payeeContact?: string;
+  // Omit to let the backend allocate across the student's outstanding bills.
+  studentBillId?: number;
+  // Required in practice for cash taken at the counter: ties the payment to
+  // the cashier's open till so the session reconciles.
+  cashCollectionSessionId?: number;
+  schoolPaymentAccountId?: number;
+  paymentConfigurationId?: number;
+  cashAmount: number;
+  allowOverpayment?: boolean;
+  paymentMethod?: PaymentMethod;
+  paymentChannel?: PaymentChannel;
+  notes?: string;
+  paidAt?: string;
+};
+
+export type PaymentAllocationResponse = {
+  id: number;
+  billLineItemId: number;
+  serviceName: string;
+  serviceCategory: ServiceCategory;
+  allocatedAmount: number;
+  lineItemBalanceBefore: number;
+  lineItemBalanceAfter: number;
+  allocationStatus: AllocationStatus;
+  allocationOrder: number;
+};
+
+export type PaymentResponse = {
+  publicId: string;
+  schoolId: number;
+  schoolName: string;
+  studentId: number;
+  studentFullName: string;
+  parentId?: number | null;
+  parentFullName?: string | null;
+  studentBillId?: number | null;
+  cashCollectionSessionId?: number | null;
+  schoolPaymentAccountId?: number | null;
+  paymentConfigurationId?: number | null;
+  transactionReference: string;
+  amount: number;
+  currency: Currency;
+  paymentMethod: PaymentMethod;
+  paymentChannel: PaymentChannel;
+  paymentStatus: PaymentStatus;
+  notes?: string | null;
+  paidAt: string;
+  confirmedAt?: string | null;
+  createdById?: number;
+  createdByFullName?: string;
+  receiptId?: number | null;
+  receiptNumber?: string | null;
+  paymentAllocations: PaymentAllocationResponse[];
+  createdAt: string;
+  updatedAt?: string;
+};
+
+// The spec types this as a plain string; these are the values the backend
+// emits over a session's lifecycle.
+export type CashSessionStatus =
+  | "OPEN"
+  | "CLOSED"
+  | "APPROVED"
+  | "PENDING_APPROVAL";
+
+export type OpenSessionRequest = {
+  schoolId: number;
+  cashierId: number;
+  openingFloatingAmount: number;
+  remarks?: string;
+};
+
+export type CloseSessionRequest = {
+  closedById?: number;
+  actualCashCounted: number;
+  // Required by the backend whenever the count doesn't match expectations.
+  varianceReason?: string;
+  remarks?: string;
+};
+
+export type ApproveSessionRequest = {
+  approvedById: number;
+};
+
+export type CashSessionResponse = {
+  publicId: string;
+  sessionNumber: string;
+  status: CashSessionStatus;
+  cashierId: number;
+  cashierName: string;
+  openingFloatingAmount: number;
+  expectedCashAmount: number;
+  expectedNonCashAmount: number;
+  actualCashCounted?: number | null;
+  varianceAmount?: number | null;
+  varianceReason?: string | null;
+  openedAt: string;
+  closedAt?: string | null;
+  approvedAt?: string | null;
+  paymentCount: number;
+  remarks?: string | null;
+};
+
+export type DiscountName =
+  | "STAFF_CHILDREN"
+  | "MULTIPLE_SIBLING"
+  | "SCHOLARSHIP"
+  | "PROMOTIONAL"
+  | "MANUAL";
+
+export type DiscountType = "FIXED" | "PERCENTAGE";
+
+// MANUAL discounts have no automatic rule, so rules exclude it.
+export type DiscountRuleType = Exclude<DiscountName, "MANUAL">;
+
+export type DiscountRequest = {
+  name: DiscountName;
+  discountType: DiscountType;
+  // Percentage points for PERCENTAGE, currency amount for FIXED.
+  value: number;
+  maxAmount?: number;
+  active?: boolean;
+  reason?: string;
+};
+
+export type DiscountResponse = {
+  publicId: string;
+  schoolId: number;
+  schoolName: string;
+  discountName: string;
+  discountType: string;
+  value: number;
+  maxAmount?: number | null;
+  active: boolean;
+  reason?: string | null;
+  createdAt: string;
+};
+
+export type DiscountRuleRequest = {
+  discountId: number;
+  ruleType: DiscountRuleType;
+  priority?: number;
+  active?: boolean;
+  reason?: string;
+  // STAFF_CHILDREN
+  directChildrenOnly?: boolean;
+  requireActiveStaff?: boolean;
+  // MULTIPLE_SIBLING (minimum 2)
+  multiSiblingCount?: number;
+  // SCHOLARSHIP
+  minAcademicScore?: number;
+  requiresFinancialNeedAssessment?: boolean;
+  maxHouseholdIncome?: number;
+  // PROMOTIONAL
+  validFrom?: string;
+  validUntil?: string;
+  maxRedemptions?: number;
+};
+
+export type DiscountRuleResponse = {
+  publicId: string;
+  schoolId: number;
+  schoolName: string;
+  discountId: number;
+  discountName: string;
+  ruleType: DiscountRuleType;
+  priority?: number;
+  active: boolean;
+  reason?: string | null;
+  directChildrenOnly?: boolean;
+  requireActiveStaff?: boolean;
+  // Request sends `multiSiblingCount`; the response echoes it back as this.
+  minSiblingCount?: number | null;
+  minAcademicScore?: number | null;
+  requiresFinancialNeedAssessment?: boolean;
+  maxHouseholdIncome?: number | null;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  maxRedemptions?: number | null;
+  redemptionCount?: number;
+  createdAt: string;
+};
+
 export type ApiError = {
   message: string;
   status?: number;

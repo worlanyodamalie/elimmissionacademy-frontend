@@ -34,6 +34,42 @@ export const ACADEMICS = {
   term: (publicId: string) => `/school/academics/terms/${publicId}`,
 } as const;
 
+// Billing: service costs (the price list), student bills (per term) and the
+// bill line items that make up a bill.
+export const BILLING = {
+  serviceCosts: "/school/payments/service-costs",
+  serviceCost: (publicId: string) =>
+    `/school/payments/service-costs/${publicId}`,
+  studentBills: "/school/payments/student-bills",
+  studentBill: (publicId: string) =>
+    `/school/payments/student-bills/${publicId}`,
+  carryForwardArrears: "/school/payments/student-bills/arrears/carry-forward",
+  billLineItems: "/school/payments/bill-line-items",
+  billLineItem: (publicId: string) =>
+    `/school/payments/bill-line-items/${publicId}`,
+  // Two ways to add a line item: priced from a service cost, or ad-hoc.
+  billLineItemFromServiceCost: "/school/payments/bill-line-items/service-cost",
+  manualBillLineItem: "/school/payments/bill-line-items/manual",
+} as const;
+
+// Collections: money coming in. A cash session is the cashier's till for a
+// shift; cash payments reference the open session they were taken in.
+export const COLLECTIONS = {
+  payments: "/school/payments",
+  cashSessions: "/school/cash-sessions",
+  cashSession: (publicId: string) => `/school/cash-sessions/${publicId}`,
+  closeCashSession: (publicId: string) =>
+    `/school/cash-sessions/${publicId}/close`,
+  approveCashSession: (publicId: string) =>
+    `/school/cash-sessions/${publicId}/approve`,
+} as const;
+
+// Discounts reduce what a bill charges; rules decide who qualifies.
+export const DISCOUNTS = {
+  discounts: "/school/discounts",
+  rules: "/school/discounts/rules",
+} as const;
+
 // App routes (used by Link / router.push). Keeping them here lets us refactor
 // route folders without grepping for stringly-typed paths.
 export const ROUTES = {
@@ -54,4 +90,11 @@ export const ROUTES = {
   admins: "/dashboard/admins",
   newAdmin: "/dashboard/admins/new",
   academics: "/dashboard/academics",
+  billing: "/dashboard/billing",
+  bill: (publicId: string) => `/dashboard/billing/bills/${publicId}`,
+  serviceCosts: "/dashboard/billing/service-costs",
+  charges: "/dashboard/billing/charges",
+  overdue: "/dashboard/billing/overdue",
+  discounts: "/dashboard/billing/discounts",
+  collections: "/dashboard/collections",
 } as const;
