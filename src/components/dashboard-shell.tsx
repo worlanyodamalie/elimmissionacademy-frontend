@@ -9,7 +9,9 @@ import { ROUTES } from "@/lib/endpoints";
 import { cn, formatRoleLabel, getInitials } from "@/lib/utils";
 import {
   AdminIcon,
+  BillingIcon,
   CalendarIcon,
+  CashIcon,
   CloseIcon,
   HeadTeacherIcon,
   HomeIcon,
@@ -62,6 +64,18 @@ const NAV: NavItem[] = [
     label: "Academics",
     description: "Academic years and terms",
     icon: CalendarIcon,
+  },
+  {
+    href: ROUTES.billing,
+    label: "Billing",
+    description: "Bills, price list, discounts",
+    icon: BillingIcon,
+  },
+  {
+    href: ROUTES.collections,
+    label: "Collections",
+    description: "Cash sessions and payments",
+    icon: CashIcon,
   },
 ];
 
