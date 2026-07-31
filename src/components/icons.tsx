@@ -115,6 +115,25 @@ export function CalendarIcon(props: IconProps) {
   );
 }
 
+export function BillingIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M6 3h9l3 3v15l-2.5-1.5L13 21l-2.5-1.5L8 21l-2-1.5V3Z" />
+      <path d="M9 8h6M9 12h6M9 16h3" />
+    </svg>
+  );
+}
+
+export function CashIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M6 10v4M18 10v4" />
+    </svg>
+  );
+}
+
 export function ChevronRightIcon(props: IconProps) {
   return (
     <svg {...baseProps} {...props}>
