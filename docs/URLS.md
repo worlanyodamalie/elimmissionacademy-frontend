@@ -43,6 +43,13 @@ These are the Next.js routes a user can visit in the browser.
 | `/dashboard/admins`                | Administrators hub + resend onboarding tool.                  | authenticated admin |
 | `/dashboard/admins/new`            | Add another administrator.                                    | authenticated admin |
 | `/dashboard/academics`             | Manage academic years and terms.                              | authenticated admin |
+| `/dashboard/billing`               | Student bills hub: open a bill, carry arrears forward.        | authenticated admin |
+| `/dashboard/billing/bills/[publicId]` | One bill: charges, add a charge, record a payment.         | authenticated admin |
+| `/dashboard/billing/service-costs` | The price list — what each service costs.                     | authenticated admin |
+| `/dashboard/billing/overdue`       | Overdue charges, oldest first — the fee-chasing worklist.      | authenticated admin |
+| `/dashboard/billing/charges`       | All bill line items, filterable by status/category/due date.  | authenticated admin |
+| `/dashboard/billing/discounts`     | Create discounts and the rules that award them.               | authenticated admin |
+| `/dashboard/collections`           | Cash sessions (open/close/approve) and recording payments.    | authenticated admin |
 
 ## API endpoints (backend)
 
@@ -85,6 +92,46 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 | `ACADEMICS.terms`          | GET    | `/school/academics/terms`           | Query `?page=&size=&sort=`                                                                           | Paginated terms.                            |
 | `ACADEMICS.term(publicId)` | GET    | `/school/academics/terms/{publicId}` | Path param only.                                                                                    | Single term.                                |
 
+### Billing (admin only)
+
+Typed wrappers for everything below live in `src/lib/billing.ts` — prefer those
+over calling `apiRequest` directly.
+
+| Constant                                | Method | Path                                                | Body / params                                                     | Notes                                                        |
+| --------------------------------------- | ------ | --------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| `BILLING.serviceCosts`                  | GET    | `/school/payments/service-costs`                    | Query `?page=&size=&sort=`                                        | Paginated price list.                                        |
+| `BILLING.serviceCosts`                  | POST   | `/school/payments/service-costs`                    | `ServiceCostRequest`                                              | Prices a service; 409 on duplicate.                          |
+| `BILLING.serviceCost(publicId)`         | GET    | `/school/payments/service-costs/{publicId}`         | Path param only.                                                  | Single service cost.                                         |
+| `BILLING.studentBills`                  | GET    | `/school/payments/student-bills`                    | Query `?page=&size=&sort=`                                        | Paginated student bills.                                     |
+| `BILLING.studentBills`                  | POST   | `/school/payments/student-bills`                    | `StudentBillRequest` (numeric `studentId`, `academicTermId`)       | Opens a bill for a student in a term; 409 if one exists.      |
+| `BILLING.studentBill(publicId)`         | GET    | `/school/payments/student-bills/{publicId}`         | Path param only.                                                  | Bill with its line items.                                    |
+| `BILLING.carryForwardArrears`           | POST   | `/school/payments/student-bills/arrears/carry-forward` | Query `?studentId&previousTermId&newTermId` (UUIDs)             | Moves an unpaid balance onto the new term. Returns no body.   |
+| `BILLING.billLineItems`                 | GET    | `/school/payments/bill-line-items`                  | Query: `BillLineItemFilter` fields + `?page=&size=&sort=`          | Filter by bill, student, status, category, source, due date.  |
+| `BILLING.billLineItem(publicId)`        | GET    | `/school/payments/bill-line-items/{publicId}`       | Path param only.                                                  | Single line item.                                            |
+| `BILLING.billLineItemFromServiceCost`   | POST   | `/school/payments/bill-line-items/service-cost`     | `AutomaticBillLineItemRequest`                                    | Charge priced from the service-cost list.                    |
+| `BILLING.manualBillLineItem`            | POST   | `/school/payments/bill-line-items/manual`           | `ManualBillLineItemRequest`                                       | Ad-hoc charge; `manualReason` required for the audit trail.   |
+
+### Collections (admin / cashier)
+
+| Constant                                | Method | Path                                        | Body / params             | Notes                                                                     |
+| --------------------------------------- | ------ | ------------------------------------------- | ------------------------- | ------------------------------------------------------------------------- |
+| `COLLECTIONS.payments`                  | POST   | `/school/payments`                          | `PaymentRequest`          | Records money received and allocates it across line items.                |
+| `COLLECTIONS.cashSessions`              | POST   | `/school/cash-sessions`                     | `OpenSessionRequest`      | Opens a cashier's till; 409 if that cashier already has an open session.   |
+| `COLLECTIONS.cashSession(publicId)`     | GET    | `/school/cash-sessions/{publicId}`          | Path param only.          | Session totals, variance and payment count.                               |
+| `COLLECTIONS.closeCashSession(publicId)`| POST   | `/school/cash-sessions/{publicId}/close`    | `CloseSessionRequest`     | Closes against a physical count; backend computes the variance.            |
+| `COLLECTIONS.approveCashSession(publicId)` | POST | `/school/cash-sessions/{publicId}/approve` | `ApproveSessionRequest`   | Supervisor sign-off; 403 if the approver lacks the role.                   |
+
+Cash taken at the counter should carry the open session's numeric
+`cashCollectionSessionId` on the payment, otherwise the till won't reconcile
+when it's closed.
+
+### Discounts (admin only)
+
+| Constant              | Method | Path                       | Body / params          | Notes                                                     |
+| --------------------- | ------ | -------------------------- | ---------------------- | --------------------------------------------------------- |
+| `DISCOUNTS.discounts` | POST   | `/school/discounts`        | `DiscountRequest`      | Fixed or percentage discount; 409 on duplicate name.      |
+| `DISCOUNTS.rules`     | POST   | `/school/discounts/rules`  | `DiscountRuleRequest`  | Eligibility criteria so a discount applies automatically. |
+
 ### Payload shapes
 
 Canonical TypeScript types live in `src/lib/types.ts`. Keep this brief; do not
@@ -99,6 +146,18 @@ duplicate every field here.
 - `StudentParentEntry` — `{ existingParent, newParent }` (exactly one set)
 - `ParentRelationship` — relation type, custody, contact preferences, permissions
 - `ParentSummary` / `PageResponse<T>` — parent lookup result row and page wrapper
+- `ServiceCostRequest` / `StudentBillRequest` — price-list entry and per-term bill
+- `AutomaticBillLineItemRequest` / `ManualBillLineItemRequest` — the two ways to
+  add a charge to a bill (from the price list, or ad-hoc)
+- `PaymentRequest` — `cashAmount` plus optional bill, session and payee details
+- `OpenSessionRequest` / `CloseSessionRequest` / `ApproveSessionRequest` — the
+  cash-session lifecycle
+- `DiscountRequest` / `DiscountRuleRequest` — a discount and its eligibility rule
+
+Enums worth noting: currency spells the euro `EURO` (not `EUR`); bills and line
+items use `BillPaymentStatus` (`PAID`/`UNPAID`/`PARTIALLY_PAID`/`VOID`) while
+payments use a different `PaymentStatus`
+(`PENDING`/`CONFIRMED`/`SUCCESSFUL`/`FAILED`/`REVERSED`).
 
 ## Cross-cutting concerns
 
