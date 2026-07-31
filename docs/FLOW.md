@@ -145,7 +145,8 @@ toast: "Password set" → /login?school=ELI_xxxxx
   │   ┌──────────────────────────────────────────────┐
   │   │ DashboardShell                                │
   │   │  - sidebar (Overview, Students, Teachers,     │
-  │   │    Head teachers, Admins)                     │
+  │   │    Head teachers, Admins, Academics,          │
+  │   │    Billing, Collections)                      │
   │   │  - school-code badge                          │
   │   │  - user card + sign-out                       │
   │   │  - mobile drawer                              │
@@ -167,6 +168,59 @@ toast: "Password set" → /login?school=ELI_xxxxx
   └──► /dashboard/admins            → /dashboard/admins/new
          └ POST /auth/users/admins             (USERS.admins)
 ```
+
+### 3.6 Money in: billing then collecting
+
+```
+/dashboard/billing/service-costs        ← set up once per fee schedule
+  └ POST /school/payments/service-costs        (BILLING.serviceCosts)
+        │  mandatory entries auto-apply to new bills
+        ▼
+/dashboard/billing                      ← per student, per term
+  ├ POST /school/payments/student-bills        (BILLING.studentBills)
+  ├ GET  /school/payments/student-bills        (paginated table)
+  └ POST …/student-bills/arrears/carry-forward (moves an unpaid balance)
+        │
+        ▼
+/dashboard/billing/bills/[publicId]     ← the bill itself
+  ├ GET  …/student-bills/{publicId}            (bill + line items)
+  ├ add a charge, two ways:
+  │    ├ POST …/bill-line-items/service-cost   (priced from the list)
+  │    └ POST …/bill-line-items/manual         (ad-hoc, reason required)
+  └ POST /school/payments                      (record money received)
+        │
+        ▼
+/dashboard/collections                  ← the cash office
+  ├ POST /school/cash-sessions                 (open a till + float)
+  ├ POST /school/payments                      (cash carries the session id)
+  ├ POST /school/cash-sessions/{id}/close      (count → variance)
+  └ POST /school/cash-sessions/{id}/approve    (supervisor sign-off)
+```
+
+Supporting screens: `/dashboard/billing/charges` lists every line item with the
+backend's filter object (status, category, source, student, due-date window),
+`/dashboard/billing/overdue` is the fee-chasing worklist (same endpoint, pinned
+to `paymentStatus` + `dueDateTo` and sorted `dueDate,asc`), and
+`/dashboard/billing/discounts` creates discounts plus the rules that award them
+automatically.
+
+There is deliberately **no finance dashboard** yet: the API exposes no summary
+endpoint and `Page` returns counts but never sums, so every headline figure would
+have to be computed by paging the whole ledger client-side. The overdue page
+shows aging as *counts* (one `size=1` request per bucket, reading
+`totalElements`) and never totals money across pages, for the same reason. See
+[`API-GAPS.md`](./API-GAPS.md) §1c and §7.
+
+Two constraints shape these screens, both from the API:
+
+- **Numeric ids in bodies, UUIDs in paths.** Where no list response exposes the
+  numeric id a form needs, the field is a plain number input with an explanatory
+  hint (`NumericIdField`). Every instance is logged in
+  [`API-GAPS.md`](./API-GAPS.md) §1.
+- **No endpoint lists cash sessions.** `/dashboard/collections` remembers session
+  UUIDs per device in `localStorage` via `src/lib/cash-session-store.ts`, read
+  through `useSyncExternalStore` like the auth session. A "look up a session"
+  card pulls in sessions opened elsewhere.
 
 Every staff/student creation triggers a backend onboarding email.
 If a teammate doesn't receive it, any of the four hub pages exposes a
@@ -290,12 +344,18 @@ src/
 │   │   ├── students/{page,new/page}.tsx
 │   │   ├── teachers/{page,new/page}.tsx
 │   │   ├── head-teachers/{page,new/page}.tsx
-│   │   └── admins/{page,new/page}.tsx
+│   │   ├── admins/{page,new/page}.tsx
+│   │   ├── academics/page.tsx
+│   │   ├── billing/                 ← page, bills/[publicId], service-costs,
+│   │   │                              charges, overdue, discounts
+│   │   └── collections/page.tsx
 │   ├── globals.css
 │   ├── layout.tsx               ← root <html>, providers
 │   └── page.tsx                 ← /, redirects based on session
 ├── components/
 │   ├── ui.tsx                   ← Button, Field, Input, Select, Card, Alert, …
+│   ├── billing-ui.tsx           ← status badges, StatTile, Pagination, term hooks
+│   ├── payment-form.tsx         ← shared "record a payment" form
 │   ├── toast.tsx                ← ToastProvider + useToast()
 │   ├── address-fields.tsx
 │   ├── dashboard-shell.tsx      ← sidebar, topbar, route guard
@@ -307,13 +367,17 @@ src/
 ├── lib/
 │   ├── api.ts                   ← apiRequest, session helpers, decodeJwt
 │   ├── auth-context.tsx         ← useAuth + AuthProvider
-│   ├── endpoints.ts             ← AUTH, USERS, ROUTES constants
+│   ├── billing.ts               ← typed wrappers for billing/collections
+│   ├── billing-options.ts       ← select options for the billing enums
+│   ├── cash-session-store.ts    ← per-device index of cash sessions
+│   ├── endpoints.ts             ← AUTH, USERS, ACADEMICS, BILLING, … , ROUTES
 │   ├── types.ts                 ← all payload + domain types
 │   ├── utils.ts                 ← cn, getInitials, formatRoleLabel
 │   └── validation.ts            ← email, phone, password, …
 └── ...
 docs/
 ├── URLS.md                      ← full URL & endpoint reference
+├── API-GAPS.md                  ← what the backend doesn't offer yet
 └── FLOW.md                      ← (this file)
 ```
 
