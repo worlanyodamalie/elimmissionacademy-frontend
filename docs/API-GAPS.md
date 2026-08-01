@@ -1,4 +1,90 @@
-# API gaps — billing & collections
+# API gaps
+
+Two sections: onboarding (schools, staff, users) and billing/collections.
+
+---
+
+# Onboarding — schools, admins and users
+
+Written while building the registration, staff and directory screens against
+`/api/v1/auth/**`. Same rule as below: everything listed is something the
+frontend wanted and the API doesn't currently offer.
+
+## O1. The school's UUID is never returned — blocking for the profile page
+
+`GET /auth/school/{schoolId}/profile` is keyed by a **UUID**, but nothing hands
+one to the client: registration returns a string, login returns
+`accessToken`/`schoolCode`, and the profile response itself carries only a
+**numeric** `schoolId`. `/dashboard/school` currently digs through the JWT for
+a `schoolPublicId`/`schoolUuid`/`schoolId` claim and shows an explanatory error
+when none is there.
+
+**Ask:** return the school's public UUID in `LoginResponse` (and in
+`SchoolProfileResponse`), or let the endpoint accept the school code — the one
+identifier every client already has.
+
+## O2. Registration doesn't return the school code
+
+`POST /auth/school/register` responds with a sentence. The school code — the
+thing the admin must have to sign in — only reaches them by email, so the
+success screen can't display it and a bounced email means starting over.
+
+**Ask:** return `{ schoolCode, schoolId }` (or the whole `SchoolProfileResponse`)
+on 201.
+
+## O3. No staff or student lists
+
+Only `GET /auth/users/lookup` and `/auth/users/parents/lookup` exist, both
+requiring a search term. There is no way to list the teachers, head teachers,
+admins or students of a school, so `/dashboard/teachers` and its siblings are
+"add" hubs rather than rosters, and nobody can answer "who works here?".
+
+**Ask:** `GET /auth/users/teachers|head-teachers|admins|students` with
+pagination and a status filter.
+
+## O4. Lookup rows have no schema
+
+`GET /auth/users/lookup` is documented as returning `Page`, whose `content` is
+`array of object`. The UI has to guess at field names (`firstName`, `fullName`,
+`roles`, `role`, …) and read every value defensively.
+
+**Ask:** publish a `UserLookupResponse` schema — ideally including the profile
+UUID so a search result can link to that person's profile.
+
+## O5. Profile GETs can't be reached from anything
+
+`GET /auth/users/{profileId}/profile` takes a UUID, but every profile response
+exposes only numeric ids (`teacherProfileId`, `adminProfileId`, …) and no list
+endpoint returns the UUID. So the profile endpoints exist but nothing in the UI
+can link to them — the same UUID/numeric split as §1 below.
+
+## O6. User records can't be corrected or retired
+
+`PATCH /auth/users/role-change` is the only write after creation. A mistyped
+email or phone number, a member of staff who leaves, a parent who should no
+longer receive messages — none of these can be handled. `status` fields
+(`ACTIVE|INACTIVE|SUSPENDED|…`) are settable at create time and never again.
+
+**Ask:** `PATCH` for contact details, and a status change endpoint per profile.
+
+## O7. Smaller inconsistencies
+
+- **`AdminRegisterRequest.mobileNumber` has no pattern**, while the school,
+  teacher, head-teacher, admin-invite and new-parent mobile fields all require
+  `^\+233[0-9]{9}$`. The frontend normalizes local `0244…` input to `+233…`
+  everywhere for consistency.
+- **`HEADTEACHER` in `RoleChangeRequest.targetRole`** versus `ROLE_HEAD_TEACHER`
+  in the JWT and `head-teachers` in the path. Three spellings of one role.
+- **`RoleChangeRequest.profileDetails` is required** even when `targetRole` is
+  `STUDENT` or `PARENT`, which have no employment profile. The UI sends `{}`.
+- **`ParentRequest.valid`** is a validation getter leaking into the schema (see
+  §6 below for the same problem in billing).
+- **Setup/reset endpoints take the token in the query string**, so it lands in
+  server logs and proxy history. A body field would be safer.
+
+---
+
+# Billing & collections
 
 Written while building the billing and collections UI against
 `/api/v1/school/payments`, `/api/v1/school/cash-sessions` and
