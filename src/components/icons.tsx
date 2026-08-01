@@ -141,3 +141,29 @@ export function ChevronRightIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+export function SchoolIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="m12 3 9 5-9 5-9-5 9-5Z" />
+      <path d="M5 11v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" />
+    </svg>
+  );
+}
+
+export function RoleSwapIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <path d="M4 8h13l-3-3M20 16H7l3 3" />
+    </svg>
+  );
+}

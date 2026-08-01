@@ -26,8 +26,9 @@ import { ROUTES, USERS } from "@/lib/endpoints";
 import {
   dateNotInFuture,
   email as emailValidator,
+  ghanaMobile,
   hasErrors,
-  phone as phoneValidator,
+  normalizeGhanaMobile,
   validateAll,
 } from "@/lib/validation";
 import type {
@@ -239,7 +240,7 @@ export default function NewStudentPage() {
               email: (v) =>
                 !v.trim() ? "Email is required." : emailValidator(v),
               mobileNumber: (v) =>
-                !v.trim() ? "Mobile number is required." : phoneValidator(v),
+                !v.trim() ? "Mobile number is required." : ghanaMobile(v),
             },
           ),
         );
@@ -291,7 +292,7 @@ export default function NewStudentPage() {
             lastName: p.lastName.trim(),
             otherNames: p.otherNames.trim() || undefined,
             email: p.email.trim(),
-            mobileNumber: p.mobileNumber.trim(),
+            mobileNumber: normalizeGhanaMobile(p.mobileNumber),
             relationship,
           },
         };
@@ -760,6 +761,11 @@ function ParentBlock({
               label="Mobile number"
               htmlFor={id("phone")}
               required
+              hint={
+                errors.mobileNumber
+                  ? undefined
+                  : "Ghanaian number, e.g. +233241234567 or 0241234567."
+              }
               error={errors.mobileNumber}
             >
               <Input

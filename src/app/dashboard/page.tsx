@@ -158,6 +158,20 @@ export default function DashboardHome() {
               />
             ) : null}
           </div>
+          <div className="mt-4 flex flex-col gap-2 border-t border-zinc-100 pt-4 text-sm dark:border-zinc-900">
+            <Link
+              href={ROUTES.school}
+              className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-300"
+            >
+              School profile and subscription
+            </Link>
+            <Link
+              href={ROUTES.directory}
+              className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-300"
+            >
+              Find someone in this school
+            </Link>
+          </div>
         </Card>
       </section>
     </div>

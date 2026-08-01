@@ -17,6 +17,8 @@ import {
   HomeIcon,
   LogoutIcon,
   MenuIcon,
+  SchoolIcon,
+  SearchIcon,
   StudentsIcon,
   TeachersIcon,
 } from "./icons";
@@ -60,6 +62,12 @@ const NAV: NavItem[] = [
     icon: AdminIcon,
   },
   {
+    href: ROUTES.directory,
+    label: "People",
+    description: "Search users, change roles",
+    icon: SearchIcon,
+  },
+  {
     href: ROUTES.academics,
     label: "Academics",
     description: "Academic years and terms",
@@ -76,6 +84,12 @@ const NAV: NavItem[] = [
     label: "Collections",
     description: "Cash sessions and payments",
     icon: CashIcon,
+  },
+  {
+    href: ROUTES.school,
+    label: "School",
+    description: "Profile and subscription",
+    icon: SchoolIcon,
   },
 ];
 

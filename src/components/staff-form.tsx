@@ -16,9 +16,17 @@ import { AddressFields, EMPTY_ADDRESS } from "./address-fields";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "./toast";
 import {
+  ADMIN_LEVELS,
+  ADMIN_STATUSES,
+  EMPLOYMENT_TYPES,
+  HEAD_TEACHER_POSITIONS,
+  HEAD_TEACHER_STATUSES,
+} from "@/lib/staff-options";
+import {
   email as emailValidator,
+  ghanaMobile,
   hasErrors,
-  phone as phoneValidator,
+  normalizeGhanaMobile,
   validateAll,
 } from "@/lib/validation";
 import type {
@@ -43,44 +51,6 @@ type Props = {
   successDescription?: string;
   redirectTo?: string;
 };
-
-const EMPLOYMENT_TYPES: { value: EmploymentType; label: string }[] = [
-  { value: "FULL_TIME", label: "Full-time" },
-  { value: "PART_TIME", label: "Part-time" },
-  { value: "CONTRACT", label: "Contract" },
-];
-
-const HEAD_TEACHER_POSITIONS: { value: HeadTeacherPosition; label: string }[] =
-  [
-    { value: "MAIN", label: "Main" },
-    { value: "ASSISTANT", label: "Assistant" },
-    { value: "ACADEMIC", label: "Academic" },
-    { value: "DOMESTIC", label: "Domestic" },
-  ];
-
-const HEAD_TEACHER_STATUSES: { value: HeadTeacherStatus; label: string }[] = [
-  { value: "ACTIVE", label: "Active" },
-  { value: "INACTIVE", label: "Inactive" },
-  { value: "RETIRED", label: "Retired" },
-  { value: "ON_LEAVE", label: "On leave" },
-  { value: "SUSPENDED", label: "Suspended" },
-  { value: "TERMINATED", label: "Terminated" },
-];
-
-const ADMIN_LEVELS: { value: AdminLevel; label: string }[] = [
-  { value: "MAIN", label: "Main" },
-  { value: "ACADEMIC", label: "Academic" },
-  { value: "TRANSPORTATION", label: "Transportation" },
-  { value: "FEEDING", label: "Feeding" },
-  { value: "FINANCIAL", label: "Financial" },
-];
-
-const ADMIN_STATUSES: { value: AdminStatus; label: string }[] = [
-  { value: "ACTIVE", label: "Active" },
-  { value: "INACTIVE", label: "Inactive" },
-  { value: "SUSPENDED", label: "Suspended" },
-  { value: "REVOKED", label: "Revoked" },
-];
 
 const DATE_LABELS: Record<StaffRole, string> = {
   teacher: "Date employed",
@@ -194,7 +164,7 @@ export function StaffForm({
       {
         email: (v) => (!v.trim() ? "Email is required." : emailValidator(v)),
         mobileNumber: (v) =>
-          !v.trim() ? "Mobile number is required." : phoneValidator(v),
+          !v.trim() ? "Mobile number is required." : ghanaMobile(v),
         date: requiredText(dateLabel),
       },
     );
@@ -235,7 +205,7 @@ export function StaffForm({
     try {
       const payload: StaffPayload = {
         email: form.email.trim(),
-        mobileNumber: form.mobileNumber.trim(),
+        mobileNumber: normalizeGhanaMobile(form.mobileNumber),
         isExistingUser,
         personalDetails: isExistingUser
           ? undefined
@@ -328,6 +298,11 @@ export function StaffForm({
               label="Mobile number"
               htmlFor="mobile"
               required
+              hint={
+                fieldErrors.mobileNumber
+                  ? undefined
+                  : "Ghanaian number, e.g. +233241234567 or 0241234567."
+              }
               error={fieldErrors.mobileNumber}
             >
               <Input
