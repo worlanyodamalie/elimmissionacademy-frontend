@@ -76,7 +76,9 @@ function SetupPasswordForm() {
     try {
       await apiRequest(USERS.setupPassword, {
         method: "POST",
-        body: { token, newPassword: password },
+        // Token goes in the query string — the body carries only the password.
+        body: { newPassword: password },
+        query: { token },
         schoolCode,
         auth: false,
       });

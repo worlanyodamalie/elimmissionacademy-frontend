@@ -80,7 +80,8 @@ function ResetPasswordForm() {
     try {
       await apiRequest(AUTH.resetPassword, {
         method: "POST",
-        body: { token, newPassword: password },
+        // Token belongs in the query string; the body is just the password.
+        body: { newPassword: password },
         query: { token },
         schoolCode,
         auth: false,
