@@ -79,7 +79,12 @@ have a session.
         │
         ▼
 /register-school                  ← public
-  ├ user fills school + admin form
+  ├ user fills three blocks: school, primary admin, subscription
+  │   ├ school     — name, email, +233 mobile, address
+  │   ├ admin      — name, email, mobile (gets the setup link)
+  │   └ subscription — plan (BASIC|PREMIUM|ENTERPRISE),
+  │                    cycle (MONTHLY|TERMLY|YEARLY),
+  │                    currency (GHS|USD|EURO|GBP), optional trial
   ├ POST /auth/school/register    (AUTH.registerSchool)
   ▼
 "Check your email" success card
@@ -90,6 +95,7 @@ have a session.
   ├ token + schoolCode pre-filled from URL
   ├ admin chooses password (validated: ≥ 8 chars, confirm match)
   ├ POST /auth/school/admin/setup  (AUTH.adminAccountSetup)
+  │    body { password }; token in the query, school in the header
   ▼
 Redirect → /login?school=ELI_xxxxx
 ```
@@ -100,7 +106,7 @@ Redirect → /login?school=ELI_xxxxx
 /login
   ├ school code + email/username + password
   ├ validation: required + school-code shape
-  ├ POST /auth/login               (AUTH.login, X-School-Code header)
+  ├ POST /auth/users/login         (AUTH.login, X-School-Code header)
   ├ on success:
   │   ├ decode JWT → roles, userId, schoolId, schoolCode
   │   ├ writeSession({ token, schoolCode, user })
@@ -145,8 +151,8 @@ toast: "Password set" → /login?school=ELI_xxxxx
   │   ┌──────────────────────────────────────────────┐
   │   │ DashboardShell                                │
   │   │  - sidebar (Overview, Students, Teachers,     │
-  │   │    Head teachers, Admins, Academics,          │
-  │   │    Billing, Collections)                      │
+  │   │    Head teachers, Admins, People, Academics,  │
+  │   │    Billing, Collections, School)              │
   │   │  - school-code badge                          │
   │   │  - user card + sign-out                       │
   │   │  - mobile drawer                              │
@@ -165,8 +171,21 @@ toast: "Password set" → /login?school=ELI_xxxxx
   ├──► /dashboard/head-teachers     → /dashboard/head-teachers/new
   │      └ POST /auth/users/head-teachers     (USERS.headTeachers)
   │
-  └──► /dashboard/admins            → /dashboard/admins/new
-         └ POST /auth/users/admins             (USERS.admins)
+  ├──► /dashboard/admins            → /dashboard/admins/new
+  │      └ POST /auth/users/admins             (USERS.admins)
+  │
+  ├──► /dashboard/directory         (search everyone in the school)
+  │      ├ GET /auth/users/lookup             (USERS.lookup, debounced)
+  │      ├ POST /auth/users/resend-onboarding (USERS.resendOnboarding)
+  │      └──► /dashboard/directory/role-change
+  │             ├ email + mobile identify the person
+  │             ├ ADD (extra role) or TRANSFER (replace)
+  │             ├ profile block only for TEACHER/HEADTEACHER/ADMIN
+  │             └ PATCH /auth/users/role-change (USERS.roleChange)
+  │
+  └──► /dashboard/school            (registration + subscription, read-only)
+         └ GET /auth/school/{schoolId}/profile (AUTH.schoolProfile)
+              school UUID is read from the JWT — see docs/API-GAPS.md §O1
 ```
 
 ### 3.6 Money in: billing then collecting
@@ -345,6 +364,8 @@ src/
 │   │   ├── teachers/{page,new/page}.tsx
 │   │   ├── head-teachers/{page,new/page}.tsx
 │   │   ├── admins/{page,new/page}.tsx
+│   │   ├── directory/{page,role-change/page}.tsx
+│   │   ├── school/page.tsx      ← school profile + subscription
 │   │   ├── academics/page.tsx
 │   │   ├── billing/                 ← page, bills/[publicId], service-costs,
 │   │   │                              charges, overdue, discounts
@@ -369,6 +390,7 @@ src/
 │   ├── auth-context.tsx         ← useAuth + AuthProvider
 │   ├── billing.ts               ← typed wrappers for billing/collections
 │   ├── billing-options.ts       ← select options for the billing enums
+│   ├── staff-options.ts         ← select options for the staff/role enums
 │   ├── cash-session-store.ts    ← per-device index of cash sessions
 │   ├── endpoints.ts             ← AUTH, USERS, ACADEMICS, BILLING, … , ROUTES
 │   ├── types.ts                 ← all payload + domain types

@@ -42,6 +42,9 @@ These are the Next.js routes a user can visit in the browser.
 | `/dashboard/head-teachers/new`     | Add a head teacher.                                           | authenticated admin |
 | `/dashboard/admins`                | Administrators hub + resend onboarding tool.                  | authenticated admin |
 | `/dashboard/admins/new`            | Add another administrator.                                    | authenticated admin |
+| `/dashboard/directory`             | Search every user in the school; resend onboarding links.     | authenticated admin |
+| `/dashboard/directory/role-change` | Transfer someone to another role, or add a second one.        | authenticated admin |
+| `/dashboard/school`                | School profile: registration details and subscription.        | authenticated admin |
 | `/dashboard/academics`             | Manage academic years and terms.                              | authenticated admin |
 | `/dashboard/billing`               | Student bills hub: open a bill, carry arrears forward.        | authenticated admin |
 | `/dashboard/billing/bills/[publicId]` | One bill: charges, add a charge, record a payment.         | authenticated admin |
@@ -62,11 +65,13 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 
 | Constant              | Method | Path                          | Body / params                                                               | Notes                                       |
 | --------------------- | ------ | ----------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
-| `AUTH.registerSchool`     | POST   | `/auth/school/register`       | `{ school: {...}, admin: {...} }`                                           | Creates school and primary admin.           |
-| `AUTH.adminAccountSetup`  | POST   | `/auth/school/admin/setup`    | Body `{ token, password }`; query `?token&schoolCode`                       | Activates the primary admin account.        |
-| `AUTH.login`              | POST   | `/auth/login`                 | `{ login, password }`                                                       | Returns JWT and (where present) user info.  |
+| `AUTH.registerSchool`     | POST   | `/auth/school/register`       | `{ school: {...}, admin: {...}, subscription: {...} }`                      | Creates school, primary admin and subscription. |
+| `AUTH.adminAccountSetup`  | POST   | `/auth/school/admin/setup`    | Body `{ password }`; query `?token`                                         | Activates the primary admin account.        |
+| `AUTH.login`              | POST   | `/auth/users/login`           | `{ login, password }`                                                       | Returns JWT and (where present) user info.  |
+| `AUTH.systemAdminLogin`   | POST   | `/auth/system-admin/login`    | `{ login, password }`                                                       | Platform operators, not school staff. Not used by the dashboard yet. |
 | `AUTH.forgotPassword`     | POST   | `/auth/forgot-password`       | `{ email }`                                                                 | Sends a reset email.                        |
-| `AUTH.resetPassword`      | POST   | `/auth/reset-password`        | Body `{ token, newPassword }`; query `?token`                               | Completes a password reset.                 |
+| `AUTH.resetPassword`      | POST   | `/auth/reset-password`        | Body `{ newPassword }`; query `?token`                                      | Completes a password reset.                 |
+| `AUTH.schoolProfile(id)`  | GET    | `/auth/school/{schoolId}/profile` | Path param (school UUID).                                               | School details, address, currency and subscriptions. |
 
 ### Users (admin only)
 
@@ -74,10 +79,12 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 | -------------------------- | ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `USERS.students`           | POST   | `/auth/users/students`              | `{ student: {...}, parents: [...] }`                                                                 | Enrolls a student and links parents.        |
 | `USERS.parentsLookup`      | GET    | `/auth/users/parents/lookup`        | Query `?query=&page=&size=`                                                                          | Searches existing parents (paginated).      |
+| `USERS.lookup`             | GET    | `/auth/users/lookup`                | Query `?query=&page=&size=`                                                                          | Searches every user in the school (paginated). Rows are untyped objects. |
 | `USERS.teachers`           | POST   | `/auth/users/teachers`              | `StaffPayload` (teacher profile)                                                                     | Adds a classroom teacher.                   |
 | `USERS.headTeachers`       | POST   | `/auth/users/head-teachers`         | `StaffPayload` (head-teacher profile)                                                                | Adds a head teacher.                        |
 | `USERS.admins`             | POST   | `/auth/users/admins`                | `StaffPayload` (admin profile)                                                                       | Adds another admin.                         |
-| `USERS.setupPassword`      | POST   | `/auth/users/setup-password`        | `{ token, newPassword }`                                                                             | Invited users set their initial password.   |
+| `USERS.roleChange`         | PATCH  | `/auth/users/role-change`           | `RoleChangePayload` (`email`, `mobileNumber`, `targetRole`, `changeType`, `profileDetails`)          | Transfers a user to another role, or adds one alongside. |
+| `USERS.setupPassword`      | POST   | `/auth/users/setup-password`        | Body `{ newPassword }`; query `?token`                                                               | Invited users set their initial password.   |
 | `USERS.resendOnboarding`   | POST   | `/auth/users/resend-onboarding?email=...` | Query string only.                                                                              | Re-issues an onboarding link.               |
 | `USERS.profile(id)`        | GET    | `/auth/users/{profileId}/profile`   | Path param only.                                                                                     | Role-specific profile (student/parent/teacher/head-teacher/admin). |
 
