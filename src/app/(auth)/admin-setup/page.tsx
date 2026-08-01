@@ -78,8 +78,10 @@ function AdminSetupForm() {
     try {
       await apiRequest(AUTH.adminAccountSetup, {
         method: "POST",
-        body: { token, password },
-        query: { token, schoolCode },
+        // The endpoint takes the token in the query string and nothing but the
+        // password in the body; the school is identified by the header.
+        body: { password },
+        query: { token },
         schoolCode,
         auth: false,
       });

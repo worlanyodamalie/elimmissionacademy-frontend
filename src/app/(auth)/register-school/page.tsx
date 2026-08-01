@@ -6,6 +6,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Field,
   Input,
   Select,
@@ -19,16 +20,53 @@ import { useToast } from "@/components/toast";
 import { AUTH, ROUTES } from "@/lib/endpoints";
 import {
   email as emailValidator,
+  ghanaMobile,
   hasErrors,
+  normalizeGhanaMobile,
   phone as phoneValidator,
   validateAll,
 } from "@/lib/validation";
 import type {
   Address,
   ApiError,
+  Currency,
   SchoolRegistrationPayload,
+  SubscriptionCycle,
   SubscriptionPlan,
 } from "@/lib/types";
+
+const PLANS: { value: SubscriptionPlan; label: string; description: string }[] =
+  [
+    {
+      value: "BASIC",
+      label: "Basic",
+      description: "Enrolment, staff records and billing essentials.",
+    },
+    {
+      value: "PREMIUM",
+      label: "Premium",
+      description: "Adds the full billing, collections and messaging suite.",
+    },
+    {
+      value: "ENTERPRISE",
+      label: "Enterprise",
+      description: "Everything, for groups running several campuses.",
+    },
+  ];
+
+const CYCLES: { value: SubscriptionCycle; label: string }[] = [
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "TERMLY", label: "Per term" },
+  { value: "YEARLY", label: "Yearly" },
+];
+
+// The backend spells the euro "EURO"; these are the only codes it accepts.
+const CURRENCIES: { value: Currency; label: string }[] = [
+  { value: "GHS", label: "GHS — Ghana Cedi" },
+  { value: "USD", label: "USD — US Dollar" },
+  { value: "EURO", label: "EUR — Euro" },
+  { value: "GBP", label: "GBP — Pound Sterling" },
+];
 
 export default function RegisterSchoolPage() {
   const { toast } = useToast();
@@ -37,8 +75,12 @@ export default function RegisterSchoolPage() {
     schoolName: "",
     mobileNumber: "",
     email: "",
-    subscriptionPlan: "BASIC" as SubscriptionPlan,
-    currency: "GHS",
+  });
+  const [subscription, setSubscription] = useState({
+    plan: "BASIC" as SubscriptionPlan,
+    cycle: "TERMLY" as SubscriptionCycle,
+    currency: "GHS" as Currency,
+    startWithTrial: true,
   });
   const [address, setAddress] = useState<Address>(EMPTY_ADDRESS);
   const [admin, setAdmin] = useState({
@@ -87,7 +129,7 @@ export default function RegisterSchoolPage() {
         schoolEmail: (v) =>
           !v.trim() ? "School email is required." : emailValidator(v),
         schoolPhone: (v) =>
-          !v.trim() ? "School phone is required." : phoneValidator(v),
+          !v.trim() ? "School phone is required." : ghanaMobile(v),
         addressRegion: (v) =>
           v.trim() ? undefined : "Region is required.",
         addressCity: (v) => (v.trim() ? undefined : "City is required."),
@@ -110,12 +152,23 @@ export default function RegisterSchoolPage() {
     try {
       const payload: SchoolRegistrationPayload = {
         school: {
-          ...school,
+          schoolName: school.schoolName.trim(),
+          email: school.email.trim(),
+          mobileNumber: normalizeGhanaMobile(school.mobileNumber),
           address,
         },
         admin: {
-          ...admin,
-          otherNames: admin.otherNames || undefined,
+          firstName: admin.firstName.trim(),
+          lastName: admin.lastName.trim(),
+          otherNames: admin.otherNames.trim() || undefined,
+          email: admin.email.trim(),
+          mobileNumber: admin.mobileNumber.trim(),
+        },
+        subscription: {
+          plan: subscription.plan,
+          cycle: subscription.cycle,
+          currency: subscription.currency,
+          startWithTrial: subscription.startWithTrial,
         },
       };
       await apiRequest(AUTH.registerSchool, {
@@ -250,7 +303,11 @@ export default function RegisterSchoolPage() {
               <Field
                 label="School phone"
                 htmlFor="schoolPhone"
-                hint={fieldErrors.schoolPhone ? undefined : "Include country code, e.g. +233…"}
+                hint={
+                  fieldErrors.schoolPhone
+                    ? undefined
+                    : "Ghanaian number, e.g. +233241234567 or 0241234567."
+                }
                 required
                 error={fieldErrors.schoolPhone}
               >
@@ -266,37 +323,94 @@ export default function RegisterSchoolPage() {
                   invalid={!!fieldErrors.schoolPhone}
                 />
               </Field>
-              <Field label="Subscription plan" htmlFor="plan" required>
+            </div>
+          </section>
+
+          <section className="flex flex-col gap-4">
+            <header>
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                Subscription
+              </h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                What the school is billed for, and how often. You can change
+                the plan later from the dashboard.
+              </p>
+            </header>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field
+                label="Plan"
+                htmlFor="plan"
+                required
+                hint={
+                  PLANS.find((p) => p.value === subscription.plan)?.description
+                }
+              >
                 <Select
                   id="plan"
-                  value={school.subscriptionPlan}
+                  value={subscription.plan}
                   onChange={(e) =>
-                    setSchool({
-                      ...school,
-                      subscriptionPlan: e.target.value as SubscriptionPlan,
+                    setSubscription({
+                      ...subscription,
+                      plan: e.target.value as SubscriptionPlan,
                     })
                   }
                 >
-                  <option value="BASIC">Basic</option>
-                  <option value="STANDARD">Standard</option>
-                  <option value="PREMIUM">Premium</option>
+                  {PLANS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Billing cycle" htmlFor="cycle" required>
+                <Select
+                  id="cycle"
+                  value={subscription.cycle}
+                  onChange={(e) =>
+                    setSubscription({
+                      ...subscription,
+                      cycle: e.target.value as SubscriptionCycle,
+                    })
+                  }
+                >
+                  {CYCLES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <Field label="Currency" htmlFor="currency" required>
                 <Select
                   id="currency"
-                  value={school.currency}
+                  value={subscription.currency}
                   onChange={(e) =>
-                    setSchool({ ...school, currency: e.target.value })
+                    setSubscription({
+                      ...subscription,
+                      currency: e.target.value as Currency,
+                    })
                   }
                 >
-                  <option value="GHS">GHS — Ghana Cedi</option>
-                  <option value="NGN">NGN — Naira</option>
-                  <option value="USD">USD — US Dollar</option>
-                  <option value="EUR">EUR — Euro</option>
-                  <option value="GBP">GBP — Pound Sterling</option>
+                  {CURRENCIES.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
                 </Select>
               </Field>
+              <div className="flex items-center sm:pt-6">
+                <Checkbox
+                  label="Start with a free trial"
+                  description="Explore the dashboard before the first invoice."
+                  checked={subscription.startWithTrial}
+                  onChange={(e) =>
+                    setSubscription({
+                      ...subscription,
+                      startWithTrial: e.target.checked,
+                    })
+                  }
+                />
+              </div>
             </div>
           </section>
 
