@@ -29,6 +29,32 @@ export function phone(value: string): string | undefined {
     : "Enter a valid phone number, including country code.";
 }
 
+// Several onboarding endpoints (school, teacher, head teacher, admin, new
+// parent) declare `^\+233[0-9]{9}$` — a Ghanaian number in E.164 and nothing
+// else. Rejecting the local `0244…` form client-side would be unhelpful, so
+// `normalizeGhanaMobile` converts what people actually type and the validator
+// checks the normalized value.
+const GHANA_MOBILE_RE = /^\+233\d{9}$/;
+
+export function normalizeGhanaMobile(value: string): string {
+  const stripped = value.replace(/[\s-()]/g, "");
+  if (GHANA_MOBILE_RE.test(stripped)) return stripped;
+  // 0244123456 → +233244123456
+  if (/^0\d{9}$/.test(stripped)) return `+233${stripped.slice(1)}`;
+  // 233244123456 → +233244123456
+  if (/^233\d{9}$/.test(stripped)) return `+${stripped}`;
+  // 244123456 → +233244123456
+  if (/^\d{9}$/.test(stripped)) return `+233${stripped}`;
+  return stripped;
+}
+
+export function ghanaMobile(value: string): string | undefined {
+  if (!value) return undefined;
+  return GHANA_MOBILE_RE.test(normalizeGhanaMobile(value))
+    ? undefined
+    : "Enter a Ghanaian mobile number, e.g. +233241234567 or 0241234567.";
+}
+
 export function minLength(min: number, label = "This field"): Validator<string> {
   return (v) =>
     v && v.length >= min ? undefined : `${label} must be at least ${min} characters.`;

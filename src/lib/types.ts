@@ -7,7 +7,24 @@ export type Role =
   | "ROLE_STUDENT"
   | "ROLE_PARENT";
 
-export type SubscriptionPlan = "BASIC" | "STANDARD" | "PREMIUM";
+export type SubscriptionPlan = "BASIC" | "PREMIUM" | "ENTERPRISE";
+
+// Billing cadence of a school's subscription. Narrower than the `BillingCycle`
+// used for service costs further down — these are the only values
+// `SubscriptionRequest.cycle` accepts.
+export type SubscriptionCycle = "MONTHLY" | "TERMLY" | "YEARLY";
+
+export type SubscriptionStatus =
+  | "PENDING_PAYMENT"
+  | "TRIAL"
+  | "ACTIVE"
+  | "GRACE_PERIOD"
+  | "SUSPENDED"
+  | "CANCELLED_SCHEDULED"
+  | "CANCELLED"
+  | "EXPIRED";
+
+export type SchoolStatus = "ACTIVE" | "SUSPENDED" | "CLOSED";
 
 export type RelationType =
   | "MOTHER"
@@ -42,13 +59,14 @@ export type Address = {
   digitalAddress: string;
 };
 
+// POST /auth/school/register — three independent blocks: the institution, the
+// person who will run it, and the plan it starts on.
 export type SchoolRegistrationPayload = {
   school: {
     schoolName: string;
+    // Must match ^\+233[0-9]{9}$.
     mobileNumber: string;
     email: string;
-    subscriptionPlan: SubscriptionPlan;
-    currency: string;
     address: Address;
   };
   admin: {
@@ -58,6 +76,37 @@ export type SchoolRegistrationPayload = {
     email: string;
     mobileNumber: string;
   };
+  subscription: {
+    plan: SubscriptionPlan;
+    cycle: SubscriptionCycle;
+    currency: Currency;
+    startWithTrial?: boolean;
+  };
+};
+
+// GET /auth/school/{schoolId}/profile
+export type SchoolSubscriptionSummary = {
+  subscriptionId: number;
+  planName?: string;
+  status?: SubscriptionStatus;
+  startDate?: string;
+  endDate?: string;
+};
+
+export type SchoolProfileResponse = {
+  schoolId: number;
+  schoolName?: string;
+  schoolCode?: string;
+  mobileNumber?: string;
+  email?: string;
+  status?: SchoolStatus;
+  // Responses may omit any address line, so every part is optional here.
+  schoolAddress?: Partial<Address>;
+  schoolLogoUrl?: string | null;
+  timezone?: string | null;
+  currency?: Currency;
+  subscriptions?: SchoolSubscriptionSummary[];
+  activeSubscription?: SchoolSubscriptionSummary | null;
 };
 
 export type LoginPayload = {
@@ -213,6 +262,54 @@ export type StaffPayload = {
   // Omitted when linking an existing user — the backend resolves them by email.
   personalDetails?: StaffPersonalDetails;
   profileDetails: StaffProfileDetails;
+};
+
+// --- Role change (PATCH /auth/users/role-change) ---------------------------
+
+// Roles a user can be moved or added to. Note these are bare role names, not
+// the `ROLE_`-prefixed authorities that appear in the JWT.
+export type TargetRole =
+  | "STUDENT"
+  | "PARENT"
+  | "TEACHER"
+  | "HEADTEACHER"
+  | "ADMIN";
+
+// TRANSFER replaces the user's current role; ADD keeps it and grants another.
+export type RoleChangeType = "TRANSFER" | "ADD";
+
+// Exactly one of these is filled in, matching `targetRole`.
+export type EmploymentProfileDetails = {
+  teacherProfile?: TeacherProfileDetails;
+  headTeacherProfile?: HeadTeacherProfileDetails;
+  adminProfile?: AdminProfileDetails;
+};
+
+export type RoleChangePayload = {
+  email: string;
+  mobileNumber: string;
+  targetRole: TargetRole;
+  changeType: RoleChangeType;
+  profileDetails: EmploymentProfileDetails;
+};
+
+// --- User lookup (GET /auth/users/lookup) ----------------------------------
+// The API types the page content as a bare object, so every field is optional
+// and the UI renders defensively.
+export type UserLookupResult = {
+  userId?: number;
+  publicId?: string;
+  firstName?: string;
+  lastName?: string;
+  otherNames?: string | null;
+  fullName?: string;
+  email?: string;
+  mobileNumber?: string;
+  gender?: Gender;
+  roles?: string[];
+  role?: string;
+  status?: string;
+  [key: string]: unknown;
 };
 
 export type Term = "FIRST_TERM" | "SECOND_TERM" | "THIRD_TERM";

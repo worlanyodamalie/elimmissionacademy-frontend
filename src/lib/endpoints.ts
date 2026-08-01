@@ -8,17 +8,28 @@
 export const AUTH = {
   registerSchool: "/auth/school/register",
   adminAccountSetup: "/auth/school/admin/setup",
-  login: "/auth/login",
+  // School users sign in here; the system-admin console has its own endpoint.
+  login: "/auth/users/login",
+  systemAdminLogin: "/auth/system-admin/login",
   forgotPassword: "/auth/forgot-password",
   resetPassword: "/auth/reset-password",
+  // Takes the school's public UUID, not the numeric `schoolId` that appears
+  // inside the profile response.
+  schoolProfile: (schoolPublicId: string) =>
+    `/auth/school/${schoolPublicId}/profile`,
 } as const;
 
 export const USERS = {
   students: "/auth/users/students",
   parentsLookup: "/auth/users/parents/lookup",
+  // Searches every user in the current school (staff, parents, students).
+  lookup: "/auth/users/lookup",
   teachers: "/auth/users/teachers",
   headTeachers: "/auth/users/head-teachers",
   admins: "/auth/users/admins",
+  // Moves a user to another role, or adds a second role alongside the current
+  // one (PATCH).
+  roleChange: "/auth/users/role-change",
   setupPassword: "/auth/users/setup-password",
   resendOnboarding: "/auth/users/resend-onboarding",
   // Role-specific profile (student/parent/teacher/head-teacher/admin).
@@ -89,6 +100,9 @@ export const ROUTES = {
   newHeadTeacher: "/dashboard/head-teachers/new",
   admins: "/dashboard/admins",
   newAdmin: "/dashboard/admins/new",
+  directory: "/dashboard/directory",
+  roleChange: "/dashboard/directory/role-change",
+  school: "/dashboard/school",
   academics: "/dashboard/academics",
   billing: "/dashboard/billing",
   bill: (publicId: string) => `/dashboard/billing/bills/${publicId}`,
