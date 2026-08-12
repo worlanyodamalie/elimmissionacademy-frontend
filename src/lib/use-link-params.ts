@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Reads one-time link credentials (setup/reset tokens and the school code) out
@@ -20,7 +20,7 @@ export function useLinkParams<K extends string>(
   keys: Record<K, readonly string[]>,
 ): Record<K, string> {
   const params = useSearchParams();
-  const latched = useRef<Record<K, string> | null>(null);
+  const [latched, setLatched] = useState<Record<K, string> | null>(null);
 
   const read = {} as Record<K, string>;
   let complete = true;
@@ -33,11 +33,13 @@ export function useLinkParams<K extends string>(
   }
 
   // Only latch once every value is present: on a static prerender the params
-  // are empty, and freezing that empty read would break the real link.
-  if (complete && !latched.current) latched.current = read;
+  // are empty, and freezing that empty read would break the real link. This is
+  // React's "adjusting state during render" — it re-runs this component
+  // immediately, before children render or the browser paints.
+  if (complete && !latched) setLatched(read);
 
-  const values = latched.current ?? read;
-  const scrub = complete || latched.current !== null;
+  const values = latched ?? read;
+  const scrub = complete || latched !== null;
 
   useEffect(() => {
     if (!scrub) return;

@@ -13,6 +13,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import {
   BillStatusBadge,
   Money,
@@ -480,11 +481,10 @@ function FromPriceListForm({
         </Field>
 
         <Field label="Due date" htmlFor="pl-due" hint="Optional.">
-          <Input
+          <DateInput
             id="pl-due"
-            type="date"
             value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
+            onChange={(value) => setDueDate(value)}
           />
         </Field>
       </div>
@@ -698,11 +698,10 @@ function ManualChargeForm({
         </Field>
 
         <Field label="Due date" htmlFor="mc-due" hint="Optional.">
-          <Input
+          <DateInput
             id="mc-due"
-            type="date"
             value={form.dueDate}
-            onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+            onChange={(value) => setForm({ ...form, dueDate: value })}
           />
         </Field>
       </div>

@@ -15,6 +15,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import { EmptyState, Money, NumericIdField } from "@/components/billing-ui";
 import { ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
@@ -598,11 +599,10 @@ function NewRuleCard({
         {form.ruleType === "PROMOTIONAL" ? (
           <div className="grid grid-cols-1 gap-4 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:grid-cols-3">
             <Field label="Valid from" htmlFor="r-from">
-              <Input
+              <DateInput
                 id="r-from"
-                type="date"
                 value={form.validFrom}
-                onChange={(e) => setForm({ ...form, validFrom: e.target.value })}
+                onChange={(value) => setForm({ ...form, validFrom: value })}
               />
             </Field>
             <Field
@@ -610,12 +610,11 @@ function NewRuleCard({
               htmlFor="r-until"
               error={errors.validUntil}
             >
-              <Input
+              <DateInput
                 id="r-until"
-                type="date"
                 value={form.validUntil}
-                onChange={(e) =>
-                  setForm({ ...form, validUntil: e.target.value })
+                onChange={(value) =>
+                  setForm({ ...form, validUntil: value })
                 }
                 invalid={!!errors.validUntil}
               />

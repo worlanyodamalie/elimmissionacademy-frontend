@@ -13,6 +13,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import { ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import { apiRequest } from "@/lib/api";
@@ -389,12 +390,11 @@ function RoleChangeForm() {
                       required
                       error={fieldErrors.date}
                     >
-                      <Input
+                      <DateInput
                         id="rc-dateEmployed"
-                        type="date"
                         value={profile.dateEmployed}
-                        onChange={(e) =>
-                          updateProfile("dateEmployed", e.target.value)
+                        onChange={(value) =>
+                          updateProfile("dateEmployed", value)
                         }
                         required
                         invalid={!!fieldErrors.date}
@@ -447,12 +447,11 @@ function RoleChangeForm() {
                       required
                       error={fieldErrors.date}
                     >
-                      <Input
+                      <DateInput
                         id="rc-dateAppointed"
-                        type="date"
                         value={profile.dateAppointed}
-                        onChange={(e) =>
-                          updateProfile("dateAppointed", e.target.value)
+                        onChange={(value) =>
+                          updateProfile("dateAppointed", value)
                         }
                         required
                         invalid={!!fieldErrors.date}
@@ -505,12 +504,11 @@ function RoleChangeForm() {
                       required
                       error={fieldErrors.date}
                     >
-                      <Input
+                      <DateInput
                         id="rc-dateAssigned"
-                        type="date"
                         value={profile.dateAssigned}
-                        onChange={(e) =>
-                          updateProfile("dateAssigned", e.target.value)
+                        onChange={(value) =>
+                          updateProfile("dateAssigned", value)
                         }
                         required
                         invalid={!!fieldErrors.date}

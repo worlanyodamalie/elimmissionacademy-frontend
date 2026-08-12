@@ -15,6 +15,7 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import {
   EmptyState,
   Money,
@@ -398,12 +399,11 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
             required
             error={errors.effectiveFrom}
           >
-            <Input
+            <DateInput
               id="sc-from"
-              type="date"
               value={form.effectiveFrom}
-              onChange={(e) =>
-                setForm({ ...form, effectiveFrom: e.target.value })
+              onChange={(value) =>
+                setForm({ ...form, effectiveFrom: value })
               }
               invalid={!!errors.effectiveFrom}
             />
@@ -415,11 +415,10 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
             error={errors.effectiveTo}
             hint="Leave blank to keep it open-ended."
           >
-            <Input
+            <DateInput
               id="sc-to"
-              type="date"
               value={form.effectiveTo}
-              onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })}
+              onChange={(value) => setForm({ ...form, effectiveTo: value })}
               invalid={!!errors.effectiveTo}
             />
           </Field>

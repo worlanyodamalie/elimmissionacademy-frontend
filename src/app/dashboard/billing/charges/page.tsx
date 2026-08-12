@@ -11,6 +11,7 @@ import {
   PageHeader,
   Select,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import {
   BillStatusBadge,
   EmptyState,
@@ -224,26 +225,24 @@ export default function ChargesPage() {
             </Field>
 
             <Field label="Due from" htmlFor="f-from">
-              <Input
+              <DateInput
                 id="f-from"
-                type="date"
                 value={draft.dueDateFrom ?? ""}
-                onChange={(e) =>
+                onChange={(value) =>
                   setDraft({
                     ...draft,
-                    dueDateFrom: e.target.value || undefined,
+                    dueDateFrom: value || undefined,
                   })
                 }
               />
             </Field>
 
             <Field label="Due to" htmlFor="f-to">
-              <Input
+              <DateInput
                 id="f-to"
-                type="date"
                 value={draft.dueDateTo ?? ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, dueDateTo: e.target.value || undefined })
+                onChange={(value) =>
+                  setDraft({ ...draft, dueDateTo: value || undefined })
                 }
               />
             </Field>

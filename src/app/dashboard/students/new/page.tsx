@@ -15,6 +15,8 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
+import { todayIso } from "@/lib/utils";
 import {
   AddressFields,
   EMPTY_ADDRESS,
@@ -493,13 +495,12 @@ export default function NewStudentPage() {
               required
               error={studentErrors.dateOfBirth}
             >
-              <Input
+              <DateInput
                 id="s-dob"
-                type="date"
                 value={student.dateOfBirth}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) =>
-                  setStudent({ ...student, dateOfBirth: e.target.value })
+                max={todayIso()}
+                onChange={(value) =>
+                  setStudent({ ...student, dateOfBirth: value })
                 }
                 required
                 invalid={!!studentErrors.dateOfBirth}
@@ -511,12 +512,11 @@ export default function NewStudentPage() {
               required
               error={studentErrors.admissionDate}
             >
-              <Input
+              <DateInput
                 id="s-admission"
-                type="date"
                 value={student.admissionDate}
-                onChange={(e) =>
-                  setStudent({ ...student, admissionDate: e.target.value })
+                onChange={(value) =>
+                  setStudent({ ...student, admissionDate: value })
                 }
                 required
                 invalid={!!studentErrors.admissionDate}

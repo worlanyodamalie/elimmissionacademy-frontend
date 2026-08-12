@@ -12,6 +12,7 @@ import {
   PageHeader,
   Select,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import {
   BillStatusBadge,
   EmptyState,
@@ -188,13 +189,12 @@ export default function OverduePage() {
               htmlFor="od-asof"
               hint="Charges due on or before this date."
             >
-              <Input
+              <DateInput
                 id="od-asof"
-                type="date"
                 value={asOf}
-                onChange={(e) => {
+                onChange={(value) => {
                   setPage(0);
-                  setAsOf(e.target.value || todayIso());
+                  setAsOf(value || todayIso());
                 }}
               />
             </Field>

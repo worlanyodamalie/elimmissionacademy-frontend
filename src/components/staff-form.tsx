@@ -12,6 +12,7 @@ import {
   Select,
   Textarea,
 } from "./ui";
+import { DateInput } from "./date-input";
 import { AddressFields, EMPTY_ADDRESS } from "./address-fields";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "./toast";
@@ -511,11 +512,10 @@ export function StaffForm({
               required
               error={fieldErrors.date}
             >
-              <Input
+              <DateInput
                 id="profileDate"
-                type="date"
                 value={profile.date}
-                onChange={(e) => updateProfile("date", e.target.value)}
+                onChange={(value) => updateProfile("date", value)}
                 required
                 invalid={!!fieldErrors.date}
               />

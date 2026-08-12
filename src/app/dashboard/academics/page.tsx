@@ -11,6 +11,7 @@ import {
   PageHeader,
   Select,
 } from "@/components/ui";
+import { DateInput } from "@/components/date-input";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { ACADEMICS } from "@/lib/endpoints";
@@ -200,11 +201,10 @@ function NewYearCard({ onCreated }: { onCreated: () => void }) {
             required
             error={errors.startDate}
           >
-            <Input
+            <DateInput
               id="y-start"
-              type="date"
               value={form.startDate}
-              onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+              onChange={(value) => setForm({ ...form, startDate: value })}
               required
               invalid={!!errors.startDate}
             />
@@ -215,11 +215,10 @@ function NewYearCard({ onCreated }: { onCreated: () => void }) {
             required
             error={errors.endDate}
           >
-            <Input
+            <DateInput
               id="y-end"
-              type="date"
               value={form.endDate}
-              onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+              onChange={(value) => setForm({ ...form, endDate: value })}
               required
               invalid={!!errors.endDate}
             />
@@ -372,12 +371,11 @@ function NewTermCard({
               required
               error={errors.startDate}
             >
-              <Input
+              <DateInput
                 id="t-start"
-                type="date"
                 value={form.startDate}
-                onChange={(e) =>
-                  setForm({ ...form, startDate: e.target.value })
+                onChange={(value) =>
+                  setForm({ ...form, startDate: value })
                 }
                 required
                 invalid={!!errors.startDate}
@@ -389,11 +387,10 @@ function NewTermCard({
               required
               error={errors.endDate}
             >
-              <Input
+              <DateInput
                 id="t-end"
-                type="date"
                 value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                onChange={(value) => setForm({ ...form, endDate: value })}
                 required
                 invalid={!!errors.endDate}
               />
