@@ -16,6 +16,7 @@ import {
   Textarea,
 } from "./ui";
 import { Money, NumericIdField, PaymentStatusBadge } from "./billing-ui";
+import { ParentLookup } from "./parent-lookup";
 import { useToast } from "./toast";
 import { useAuth } from "@/lib/auth-context";
 import { createPayment } from "@/lib/billing";
@@ -29,6 +30,7 @@ import type {
   ApiError,
   PaymentChannel,
   PaymentMethod,
+  ParentSummary,
   PaymentRequest,
   PaymentResponse,
 } from "@/lib/types";
@@ -75,6 +77,9 @@ export function PaymentForm({
     paidAt: "",
     allowOverpayment: false,
   });
+  // The parent on record who paid, when there is one. Free-text payee details
+  // stay available for anyone who isn't a registered parent.
+  const [payer, setPayer] = useState<ParentSummary | null>(null);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +90,18 @@ export function PaymentForm({
   // Cash that isn't tied to an open till can't be reconciled at close.
   const cashWithoutSession =
     form.paymentMethod === "CASH" && !form.cashCollectionSessionId.trim();
+
+  // Linking a parent also fills the receipt fields, since the cashier would
+  // otherwise retype what the directory already knows. They stay editable.
+  function selectPayer(parent: ParentSummary | null) {
+    setPayer(parent);
+    if (!parent) return;
+    setForm((f) => ({
+      ...f,
+      payeeName: `${parent.firstName} ${parent.lastName}`.trim(),
+      payeeContact: f.payeeContact.trim() || parent.mobileNumber || "",
+    }));
+  }
 
   function setMethod(method: PaymentMethod) {
     const channels = channelsFor(method);
@@ -133,6 +150,7 @@ export function PaymentForm({
       if (form.cashCollectionSessionId.trim()) {
         body.cashCollectionSessionId = Number(form.cashCollectionSessionId);
       }
+      if (payer) body.parentId = payer.parentId;
       if (form.payeeName.trim()) body.payeeName = form.payeeName.trim();
       if (form.payeeRelationship.trim()) {
         body.payeeRelationship = form.payeeRelationship.trim();
@@ -150,6 +168,7 @@ export function PaymentForm({
           : `Reference ${payment.transactionReference}.`,
         variant: "success",
       });
+      setPayer(null);
       setForm((f) => ({
         ...f,
         cashAmount: "",
@@ -311,7 +330,21 @@ export function PaymentForm({
         <details className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
           <summary className="cursor-pointer text-sm font-medium text-zinc-800 dark:text-zinc-200">
             Who paid? (optional)
+            {payer ? (
+              <span className="ml-2 font-normal text-zinc-500 dark:text-zinc-400">
+                · linked to {payer.firstName} {payer.lastName}
+              </span>
+            ) : null}
           </summary>
+          <div className="mt-3">
+            <ParentLookup
+              inputId="pay-parent"
+              selected={payer}
+              onSelect={selectPayer}
+              label="Parent on record"
+              hint="Attributes the payment to their account. Leave blank if the payer isn't a registered parent."
+            />
+          </div>
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Payee name" htmlFor="pay-payee">
               <Input
