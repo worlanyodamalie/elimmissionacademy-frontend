@@ -71,6 +71,9 @@ type ParentDraft = {
   relationType: RelationType;
   isPrimaryContact: boolean;
   hasPickupPermission: boolean;
+  // Who the school rings first, second, third. Held as a string so the field
+  // can be cleared while typing; defaults to the parent's position in the list.
+  emergencyContactOrder: string;
   hasFinancialResponsibility: boolean;
   custodyType: CustodyType;
   custodyNotes: string;
@@ -105,7 +108,7 @@ const CONTACT_METHODS: { value: PreferredContactMethod; label: string }[] = [
   { value: "WHATSAPP", label: "WhatsApp" },
 ];
 
-function emptyParent(primary = false): ParentDraft {
+function emptyParent(primary = false, order = 1): ParentDraft {
   return {
     mode: "new",
     selectedParent: null,
@@ -120,6 +123,7 @@ function emptyParent(primary = false): ParentDraft {
     relationType: "MOTHER",
     isPrimaryContact: primary,
     hasPickupPermission: true,
+    emergencyContactOrder: String(order),
     hasFinancialResponsibility: primary,
     custodyType: primary ? "PRIMARY" : "JOINT",
     custodyNotes: "",
@@ -185,7 +189,7 @@ export default function NewStudentPage() {
   }
 
   function addParent() {
-    setParents((curr) => [...curr, emptyParent(false)]);
+    setParents((curr) => [...curr, emptyParent(false, curr.length + 1)]);
     setParentErrors((curr) => [...curr, {}]);
   }
 
@@ -314,7 +318,7 @@ export default function NewStudentPage() {
           isPrimaryContact: p.isPrimaryContact,
           hasPickupPermission: p.hasPickupPermission,
           hasFinancialResponsibility: p.hasFinancialResponsibility,
-          emergencyContactOrder: i + 1,
+          emergencyContactOrder: Number(p.emergencyContactOrder) || i + 1,
           custodyType: p.custodyType,
           custodyNotes: p.custodyNotes.trim() || null,
           preferredContactMethods: p.preferredContactMethods,
@@ -882,6 +886,23 @@ function ParentBlock({
               </option>
             ))}
           </Select>
+        </Field>
+        <Field
+          label="Emergency contact order"
+          htmlFor={id("emergency-order")}
+          hint="1 is rung first, 2 next, and so on."
+        >
+          <Input
+            id={id("emergency-order")}
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={parent.emergencyContactOrder}
+            onChange={(e) =>
+              onUpdate({ emergencyContactOrder: e.target.value })
+            }
+          />
         </Field>
         <Field
           label="Custody notes"
