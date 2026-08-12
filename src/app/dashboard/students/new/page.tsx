@@ -45,10 +45,14 @@ import type {
   StudentPayload,
 } from "@/lib/types";
 
-// How a new parent's address is supplied: skipped, copied from the student, or
-// entered by hand. The API takes the address as an optional whole, so a partial
-// one is never sent.
-type ParentAddressMode = "none" | "same" | "custom";
+// How a new parent's address is supplied: copied from the student, or entered
+// by hand. The API takes the address as an optional whole, so a partial one is
+// never sent.
+//
+// There is deliberately no "skip it" mode: the address is optional in the API
+// contract, but POST /auth/users/students answers 500 when `newParent.address`
+// is absent. See docs/API-GAPS.md.
+type ParentAddressMode = "same" | "custom";
 
 type ParentDraft = {
   mode: "new" | "existing";
@@ -323,11 +327,7 @@ export default function NewStudentPage() {
           };
         }
         const parentAddress =
-          p.addressMode === "same"
-            ? studentAddress
-            : p.addressMode === "custom"
-              ? p.address
-              : undefined;
+          p.addressMode === "same" ? studentAddress : p.address;
         return {
           existingParent: null,
           newParent: {
@@ -894,7 +894,7 @@ function ParentBlock({
           <Field
             label="Home address"
             htmlFor={id("addr-mode")}
-            hint="Optional. Used for correspondence and emergency contact."
+            hint="Used for correspondence and emergency contact."
             className="sm:max-w-xs"
           >
             <Select
@@ -908,7 +908,6 @@ function ParentBlock({
             >
               <option value="same">Same as student</option>
               <option value="custom">Enter a different address</option>
-              <option value="none">Not provided</option>
             </Select>
           </Field>
           {parent.addressMode === "custom" ? (
