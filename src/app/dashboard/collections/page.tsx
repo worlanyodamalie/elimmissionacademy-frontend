@@ -57,20 +57,20 @@ export default function CollectionsPage() {
         description="Open a till before taking cash, record what comes in, then count down and hand the session to a supervisor."
       />
 
-      <Alert variant="info" title="How sessions are listed">
-        The API can fetch a session by id but has no endpoint to list them, so
-        this page keeps track of the sessions opened or looked up on this device.
-      </Alert>
-
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <OpenSessionCard onOpened={trackSession} />
         <TrackSessionCard onTracked={trackSession} />
       </div>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-          Cash sessions
-        </h2>
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            Cash sessions
+          </h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Sessions you opened or looked up on this device.
+          </p>
+        </div>
         {tracked.length === 0 ? (
           <EmptyState title="No sessions on this device">
             Open a till above, or paste a session id to pull one up.
