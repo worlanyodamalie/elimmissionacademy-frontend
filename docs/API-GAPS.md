@@ -85,7 +85,48 @@ form has dropped its "Not provided" address option so an address is always sent;
 a missing one would otherwise be an unexplained failure at the end of a long
 form.
 
-## O8. Smaller inconsistencies
+## O8. Enrolling 500s when a new parent's email or mobile is already taken
+
+`POST /auth/users/students` answers **500** when `newParent.email` or
+`newParent.mobileNumber` already belongs to a user at the school. Either one is
+enough on its own. Reproduced 2026-08-12; the payload that provoked the original
+report reused the school admin's mobile (`+233242206604`, user id 14) under a
+different email.
+
+Colliding with someone who is already a *parent* is handled and returns 201.
+Only a collision with a non-parent user (staff, admin) crashes — which is the
+case an admin is least able to predict, since those people don't show up in the
+parent lookup.
+
+**Ask:** answer **409** with a message naming the clashing field, or link the
+existing user as a parent the way a parent-to-parent collision already is.
+
+Until then the enrollment form maps a bare 500 to a message naming this as the
+likely cause. That is a guess dressed as an explanation — it should be deleted
+the moment the API returns a real error.
+
+## O9. `/auth/users/lookup` has three different response shapes
+
+The spec says `Page`. In practice, against `WOR_b8df0` on 2026-08-12:
+
+| Matches | Response |
+| --- | --- |
+| 0 | **200** with an **empty body** — not `{"content":[]}` |
+| 1 | **200** with a **bare user object** — not wrapped in a page |
+| 2+ | **500** |
+
+`/dashboard/directory` types the response as `PageResponse<UserLookupResult>`
+and reads `.content`, so it shows nothing for a single hit and errors outright
+on a common surname.
+
+`/auth/users/parents/lookup` is worse: it returned an empty 200 for a term with
+no matches and **500 for every term that did match**, so the `ParentLookup`
+component can't find anyone. This blocks the workaround suggested in §O8 —
+an admin told to link an existing parent has no working way to find them.
+
+**Ask:** always return a `Page`, empty content and all.
+
+## O10. Smaller inconsistencies
 
 - **`AdminRegisterRequest.mobileNumber` has no pattern**, while the school,
   teacher, head-teacher, admin-invite and new-parent mobile fields all require

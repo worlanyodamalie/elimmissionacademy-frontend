@@ -375,7 +375,16 @@ export default function NewStudentPage() {
       router.push(ROUTES.students);
     } catch (err) {
       const apiErr = err as ApiError;
-      setError(apiErr.message ?? "Could not enroll student.");
+      // The API answers a bare 500 when a new parent's email or mobile already
+      // belongs to someone at the school, so there is no message to show and
+      // the cause is impossible to guess from the form. Name the likely reason
+      // rather than leaving the admin staring at "something went wrong".
+      // See docs/API-GAPS.md §O8.
+      const duplicateHint =
+        apiErr.status === 500 && parents.some((p) => p.mode === "new")
+          ? "Could not enroll student. If a parent above is already at this school — as a staff member, or as another student's parent — their email and mobile number are already registered. Tick “This parent already has an account” and link them instead."
+          : "Could not enroll student.";
+      setError(apiErr.message?.trim() || duplicateHint);
     } finally {
       setSubmitting(false);
     }
