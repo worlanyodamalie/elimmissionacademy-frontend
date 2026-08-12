@@ -45,6 +45,11 @@ import type {
   StudentPayload,
 } from "@/lib/types";
 
+// How a new parent's address is supplied: skipped, copied from the student, or
+// entered by hand. The API takes the address as an optional whole, so a partial
+// one is never sent.
+type ParentAddressMode = "none" | "same" | "custom";
+
 type ParentDraft = {
   mode: "new" | "existing";
   selectedParent: ParentSummary | null;
@@ -53,6 +58,10 @@ type ParentDraft = {
   otherNames: string;
   email: string;
   mobileNumber: string;
+  // Optional on the API; "" means "not specified" and is omitted from the body.
+  gender: Gender | "";
+  addressMode: ParentAddressMode;
+  address: Address;
   relationType: RelationType;
   isPrimaryContact: boolean;
   hasPickupPermission: boolean;
@@ -99,6 +108,9 @@ function emptyParent(primary = false): ParentDraft {
     otherNames: "",
     email: "",
     mobileNumber: "",
+    gender: "",
+    addressMode: "same",
+    address: EMPTY_ADDRESS,
     relationType: "MOTHER",
     isPrimaryContact: primary,
     hasPickupPermission: true,
@@ -146,6 +158,10 @@ export default function NewStudentPage() {
     email?: string;
     mobileNumber?: string;
     preferredContactMethods?: string;
+    country?: string;
+    region?: string;
+    city?: string;
+    street?: string;
   };
   const [studentErrors, setStudentErrors] = useState<StudentErrors>({});
   const [parentErrors, setParentErrors] = useState<ParentErrors[]>([{}]);
@@ -244,6 +260,27 @@ export default function NewStudentPage() {
             },
           ),
         );
+        // The API rejects a partial address, so a hand-entered one must be
+        // complete before we include it.
+        if (p.addressMode === "custom") {
+          Object.assign(
+            errs,
+            validateAll(
+              {
+                country: p.address.country,
+                region: p.address.region,
+                city: p.address.city,
+                street: p.address.street,
+              },
+              {
+                country: (v) => (v.trim() ? undefined : "Country is required."),
+                region: (v) => (v.trim() ? undefined : "Region is required."),
+                city: (v) => (v.trim() ? undefined : "City is required."),
+                street: (v) => (v.trim() ? undefined : "Street is required."),
+              },
+            ),
+          );
+        }
       }
       if (p.preferredContactMethods.length === 0) {
         errs.preferredContactMethods =
@@ -285,6 +322,12 @@ export default function NewStudentPage() {
             newParent: null,
           };
         }
+        const parentAddress =
+          p.addressMode === "same"
+            ? studentAddress
+            : p.addressMode === "custom"
+              ? p.address
+              : undefined;
         return {
           existingParent: null,
           newParent: {
@@ -293,6 +336,8 @@ export default function NewStudentPage() {
             otherNames: p.otherNames.trim() || undefined,
             email: p.email.trim(),
             mobileNumber: normalizeGhanaMobile(p.mobileNumber),
+            gender: p.gender || undefined,
+            address: parentAddress,
             relationship,
           },
         };
@@ -627,6 +672,10 @@ function ParentBlock({
     email?: string;
     mobileNumber?: string;
     preferredContactMethods?: string;
+    country?: string;
+    region?: string;
+    city?: string;
+    street?: string;
   };
   canRemove: boolean;
   onUpdate: (patch: Partial<ParentDraft>) => void;
@@ -778,6 +827,19 @@ function ParentBlock({
                 invalid={!!errors.mobileNumber}
               />
             </Field>
+            <Field label="Gender" htmlFor={id("gender")}>
+              <Select
+                id={id("gender")}
+                value={parent.gender}
+                onChange={(e) =>
+                  onUpdate({ gender: e.target.value as Gender | "" })
+                }
+              >
+                <option value="">Not specified</option>
+                <option value="MALE">Male</option>
+                <option value="FEMALE">Female</option>
+              </Select>
+            </Field>
           </>
         )}
 
@@ -825,6 +887,44 @@ function ParentBlock({
           />
         </Field>
       </div>
+
+      {parent.mode === "new" ? (
+        <div className="mt-4 flex flex-col gap-4">
+          <Field
+            label="Home address"
+            htmlFor={id("addr-mode")}
+            hint="Optional. Used for correspondence and emergency contact."
+            className="sm:max-w-xs"
+          >
+            <Select
+              id={id("addr-mode")}
+              value={parent.addressMode}
+              onChange={(e) =>
+                onUpdate({
+                  addressMode: e.target.value as ParentAddressMode,
+                })
+              }
+            >
+              <option value="same">Same as student</option>
+              <option value="custom">Enter a different address</option>
+              <option value="none">Not provided</option>
+            </Select>
+          </Field>
+          {parent.addressMode === "custom" ? (
+            <AddressFields
+              value={parent.address}
+              onChange={(address) => onUpdate({ address })}
+              idPrefix={id("addr")}
+              errors={{
+                country: errors.country,
+                region: errors.region,
+                city: errors.city,
+                street: errors.street,
+              }}
+            />
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-col gap-3">
         <fieldset>

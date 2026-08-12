@@ -171,6 +171,9 @@ export type NewParentPayload = {
   otherNames?: string;
   email: string;
   mobileNumber: string;
+  // Optional in NewParentRequest, but the backend stores them when supplied.
+  gender?: Gender;
+  address?: Address;
   relationship: ParentRelationship;
 };
 

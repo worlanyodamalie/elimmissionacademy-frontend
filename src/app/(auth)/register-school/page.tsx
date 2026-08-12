@@ -162,7 +162,7 @@ export default function RegisterSchoolPage() {
           lastName: admin.lastName.trim(),
           otherNames: admin.otherNames.trim() || undefined,
           email: admin.email.trim(),
-          mobileNumber: admin.mobileNumber.trim(),
+          mobileNumber: normalizeGhanaMobile(admin.mobileNumber),
         },
         subscription: {
           plan: subscription.plan,
