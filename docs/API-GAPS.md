@@ -67,7 +67,25 @@ longer receive messages — none of these can be handled. `status` fields
 
 **Ask:** `PATCH` for contact details, and a status change endpoint per profile.
 
-## O7. Smaller inconsistencies
+## O7. Enrolling a student 500s when a parent has no address — backend bug
+
+`NewParentRequest.address` is optional in the OpenAPI schema (`required` is
+`["email","firstName","lastName","mobileNumber","relationship"]`), but
+`POST /auth/users/students` answers **500 Internal Server Error** when the field
+is absent. Reproduced 2026-08-12 against the Railway deployment: an otherwise
+identical payload returns 201 with the address present and 500 with it removed.
+
+Worth noting because this was first reported as "`emergencyContactOrder` is
+missing from the form". It isn't the cause — that field is optional in the
+schema and the form has always sent it (position in the parent list), and a
+payload omitting it still returns 201.
+
+**Ask:** null-check `newParent.address` server-side. Until then, the enrollment
+form has dropped its "Not provided" address option so an address is always sent;
+a missing one would otherwise be an unexplained failure at the end of a long
+form.
+
+## O8. Smaller inconsistencies
 
 - **`AdminRegisterRequest.mobileNumber` has no pattern**, while the school,
   teacher, head-teacher, admin-invite and new-parent mobile fields all require
