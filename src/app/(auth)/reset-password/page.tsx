@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 import { Alert, Button, Card, Field, PasswordInput } from "@/components/ui";
 import { SchoolCodeCard } from "@/components/school-code-card";
 import { apiRequest, rememberSchoolCode } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { AUTH, ROUTES } from "@/lib/endpoints";
+import { useLinkParams } from "@/lib/use-link-params";
 import {
   hasErrors,
   password as passwordValidator,
@@ -25,14 +26,11 @@ export default function ResetPasswordPage() {
 
 function ResetPasswordForm() {
   const router = useRouter();
-  const params = useSearchParams();
   const { toast } = useToast();
-  const token = (params.get("token") ?? "").trim();
-  const schoolCode = (
-    params.get("schoolCode") ??
-    params.get("school") ??
-    ""
-  ).trim();
+  const { token, schoolCode } = useLinkParams({
+    token: ["token"],
+    schoolCode: ["schoolCode", "school"],
+  });
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -45,15 +43,6 @@ function ResetPasswordForm() {
   }>({});
 
   const linkInvalid = !token || !schoolCode;
-
-  // Scrub token + schoolCode from the visible URL once read.
-  useEffect(() => {
-    if (linkInvalid) return;
-    if (typeof window === "undefined") return;
-    if (window.location.search) {
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, [linkInvalid]);
 
   const mismatch = useMemo(
     () => confirm.length > 0 && password !== confirm,
