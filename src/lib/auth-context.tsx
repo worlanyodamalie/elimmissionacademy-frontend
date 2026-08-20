@@ -46,7 +46,12 @@ function subscribeAuth(callback: () => void): () => void {
 let cachedSnapshot: AuthSession | null = null;
 let cachedSnapshotKey = "";
 
-function getSnapshot(): AuthSession | null {
+// `undefined` means "not read yet". The server render and the hydration render
+// must return the same thing, and neither can touch localStorage — so they
+// report unknown rather than null. Returning null there is what made the app
+// think it was signed out for one render on every reload, redirect to /login,
+// and bounce back once the real session landed.
+function getSnapshot(): AuthSession | null | undefined {
   const next = readSession();
   const key = next ? `${next.token}|${next.schoolCode}` : "";
   if (key !== cachedSnapshotKey) {
@@ -56,19 +61,26 @@ function getSnapshot(): AuthSession | null {
   return cachedSnapshot;
 }
 
-function getServerSnapshot(): AuthSession | null {
-  return null;
+function getServerSnapshot(): AuthSession | null | undefined {
+  return undefined;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const session = useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     subscribeAuth,
     getSnapshot,
     getServerSnapshot,
   );
-  // After hydration, useSyncExternalStore has already read from localStorage,
-  // so we never sit in a "loading" state — any null session means logged out.
-  const loading = false;
+  // Until the client has read localStorage the answer is unknown, not "logged
+  // out". Callers must gate on `loading` before acting on a null session.
+  const loading = snapshot === undefined;
+  const session = snapshot ?? null;
+
+  // Note: nothing signs the user out when the access token expires. That is
+  // deliberate — the backend issues a 1-hour token and a refresh token it has
+  // no endpoint to redeem (docs/API-GAPS.md §O12), so expiry handling would be
+  // an hourly forced logout with no way to renew. Revisit when /auth/refresh
+  // ships.
 
   const login = useCallback<AuthContextValue["login"]>(
     async ({ login: identifier, password, schoolCode }) => {
