@@ -18,6 +18,20 @@ export function getInitials(
   return initials || fallback;
 }
 
+// The API returns some names as a `FullName` object rather than a string
+// (`AcademicYearResponse.createdByName`, `BillLineItemResponse.createdByName`).
+// Returns "" when there is no name to show, so callers can test it directly.
+export function formatFullName(
+  name?: { firstName?: string; lastName?: string; otherNames?: string | null } | string | null,
+): string {
+  if (!name) return "";
+  if (typeof name === "string") return name.trim();
+  return [name.firstName, name.otherNames, name.lastName]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 // SCREAMING_SNAKE_CASE enum → "Sentence case" for display.
 export function formatEnumLabel(value: string | undefined | null): string {
   if (!value) return "—";
