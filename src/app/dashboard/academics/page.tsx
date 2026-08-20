@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   Alert,
   Badge,
@@ -12,39 +12,25 @@ import {
   Select,
 } from "@/components/ui";
 import { DateInput } from "@/components/date-input";
-import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/toast";
-import { ACADEMICS } from "@/lib/endpoints";
+import {
+  TERM_OPTIONS,
+  createAcademicTerm,
+  createAcademicYear,
+  resolveAcademicYearId,
+  termLabel,
+  yearIdsByName,
+  type AcademicTermRecord,
+} from "@/lib/academics";
+import { useAcademicTerms } from "@/lib/use-academic-terms";
+import { formatDate, formatFullName } from "@/lib/utils";
 import { hasErrors, validateAll } from "@/lib/validation";
 import type {
-  AcademicTermRequest,
   AcademicYearRequest,
   AcademicYearResponse,
   ApiError,
-  PageResponse,
   Term,
 } from "@/lib/types";
-
-const TERM_OPTIONS: { value: Term; label: string }[] = [
-  { value: "FIRST_TERM", label: "First term" },
-  { value: "SECOND_TERM", label: "Second term" },
-  { value: "THIRD_TERM", label: "Third term" },
-];
-
-function termLabel(term: Term): string {
-  return TERM_OPTIONS.find((t) => t.value === term)?.label ?? term;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      });
-}
 
 const requiredDate = (label: string) => (v: string) =>
   v ? undefined : `${label} is required.`;
@@ -56,34 +42,11 @@ function dateRangeError(startDate: string, endDate: string): string | undefined 
 }
 
 export default function AcademicsPage() {
-  const [years, setYears] = useState<AcademicYearResponse[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const { years, terms, currentTerm, loading, error } =
+    useAcademicTerms(reloadKey);
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiRequest<PageResponse<AcademicYearResponse> | AcademicYearResponse[]>(
-      ACADEMICS.years,
-      { query: { page: "0", size: "50" } },
-    )
-      .then((data) => {
-        if (cancelled) return;
-        setYears(Array.isArray(data) ? data : (data?.content ?? []));
-        setLoadError(null);
-        setLoading(false);
-      })
-      .catch((err: ApiError) => {
-        if (cancelled) return;
-        setLoadError(err.message ?? "Could not load academic years.");
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -92,15 +55,34 @@ export default function AcademicsPage() {
         description="Set up academic years and their terms. Terms drive enrollment, billing cycles, and teacher assignments."
       />
 
-      {loadError ? (
-        <Alert variant="error" title="Could not load academic years">
-          {loadError}
+      {error ? (
+        <Alert variant="error" title="Could not load academics">
+          {error}
         </Alert>
+      ) : null}
+
+      {currentTerm ? (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-xs uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Current term
+              </p>
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {currentTerm.label}
+              </p>
+            </div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {formatDate(currentTerm.startDate)} –{" "}
+              {formatDate(currentTerm.endDate)}
+            </p>
+          </div>
+        </Card>
       ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <NewYearCard onCreated={refresh} />
-        <NewTermCard years={years} onCreated={refresh} />
+        <NewTermCard years={years} terms={terms} onCreated={refresh} />
       </div>
 
       <section className="flex flex-col gap-4">
@@ -116,7 +98,9 @@ export default function AcademicsPage() {
             </p>
           </Card>
         ) : (
-          years.map((year) => <YearCard key={year.publicId} year={year} />)
+          years.map((year) => (
+            <YearCard key={year.publicId} year={year} terms={terms} />
+          ))
         )}
       </section>
     </div>
@@ -154,7 +138,7 @@ function NewYearCard({ onCreated }: { onCreated: () => void }) {
         startDate: form.startDate,
         endDate: form.endDate,
       };
-      await apiRequest(ACADEMICS.years, { method: "POST", body: payload });
+      await createAcademicYear(payload);
       toast({
         title: "Academic year created",
         description: `${payload.name} has been added.`,
@@ -236,39 +220,68 @@ function NewYearCard({ onCreated }: { onCreated: () => void }) {
 
 function NewTermCard({
   years,
+  terms,
   onCreated,
 }: {
   years: AcademicYearResponse[];
+  terms: AcademicTermRecord[];
   onCreated: () => void;
 }) {
   const { toast } = useToast();
-  // Only years whose numeric id is known can receive terms; the create-term
-  // endpoint takes academicYearId, not the year's publicId.
-  const selectableYears = years.filter(
-    (y) => typeof y.academicYearId === "number",
-  );
+  // The create-term endpoint takes the year's numeric `academicYearId`, which
+  // the year response doesn't carry — it only appears on terms that already
+  // exist (docs/API-GAPS.md §1). So a year is picked by its UUID here and the
+  // numeric id resolved from a sibling term; a year with no terms yet can't be
+  // resolved that way, and falls back to asking for the id.
+  const idsByName = yearIdsByName(terms);
   const [form, setForm] = useState({
-    yearId: "",
+    yearPublicId: "",
+    manualYearId: "",
     termNumber: "FIRST_TERM" as Term,
     startDate: "",
     endDate: "",
   });
   const [errors, setErrors] = useState<{
-    yearId?: string;
+    yearPublicId?: string;
+    manualYearId?: string;
     startDate?: string;
     endDate?: string;
   }>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedYear = years.find((y) => y.publicId === form.yearPublicId);
+  const resolvedYearId = selectedYear
+    ? resolveAcademicYearId(selectedYear, idsByName)
+    : undefined;
+  // Only asked for when the year has no term to borrow the id from.
+  const needsManualYearId = !!selectedYear && resolvedYearId === undefined;
+  const academicYearId = resolvedYearId ?? Number(form.manualYearId);
+
+  // A year holds one of each term, so the ones already created are off-limits.
+  const takenTerms = new Set(
+    (selectedYear?.academicTerms ?? []).map((t) => t.termNumber),
+  );
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
     const errs = validateAll(
-      { yearId: form.yearId, startDate: form.startDate, endDate: form.endDate },
       {
-        yearId: (v) => (v ? undefined : "Select an academic year."),
+        yearPublicId: form.yearPublicId,
+        manualYearId: form.manualYearId,
+        startDate: form.startDate,
+        endDate: form.endDate,
+      },
+      {
+        yearPublicId: (v) => (v ? undefined : "Select an academic year."),
+        manualYearId: (v) =>
+          !needsManualYearId
+            ? undefined
+            : /^\d+$/.test(v.trim())
+              ? undefined
+              : "Enter the year's numeric id.",
         startDate: requiredDate("Start date"),
         endDate: (v) =>
           requiredDate("End date")(v) ?? dateRangeError(form.startDate, v),
@@ -279,20 +292,21 @@ function NewTermCard({
 
     setSubmitting(true);
     try {
-      const payload: AcademicTermRequest = {
-        academicYearId: Number(form.yearId),
+      const term = await createAcademicTerm({
+        academicYearId,
         termNumber: form.termNumber,
         startDate: form.startDate,
         endDate: form.endDate,
-      };
-      await apiRequest(ACADEMICS.terms, { method: "POST", body: payload });
+      });
       toast({
         title: "Term created",
-        description: `${termLabel(form.termNumber)} has been added.`,
+        description: `${termLabel(term.termNumber ?? form.termNumber)} has been added to ${
+          term.academicYearName ?? selectedYear?.name
+        }.`,
         variant: "success",
       });
       setForm({
-        yearId: form.yearId,
+        ...form,
         termNumber: "FIRST_TERM",
         startDate: "",
         endDate: "",
@@ -319,7 +333,7 @@ function NewTermCard({
           </Alert>
         </div>
       ) : null}
-      {selectableYears.length === 0 ? (
+      {years.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           Create an academic year first — terms belong to a year.
         </p>
@@ -334,17 +348,24 @@ function NewTermCard({
               label="Academic year"
               htmlFor="t-year"
               required
-              error={errors.yearId}
+              error={errors.yearPublicId}
             >
               <Select
                 id="t-year"
-                value={form.yearId}
-                onChange={(e) => setForm({ ...form, yearId: e.target.value })}
+                value={form.yearPublicId}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    yearPublicId: e.target.value,
+                    manualYearId: "",
+                  })
+                }
                 required
+                invalid={!!errors.yearPublicId}
               >
                 <option value="">Select a year…</option>
-                {selectableYears.map((y) => (
-                  <option key={y.publicId} value={String(y.academicYearId)}>
+                {years.map((y) => (
+                  <option key={y.publicId} value={y.publicId}>
                     {y.name}
                   </option>
                 ))}
@@ -359,8 +380,13 @@ function NewTermCard({
                 }
               >
                 {TERM_OPTIONS.map((t) => (
-                  <option key={t.value} value={t.value}>
+                  <option
+                    key={t.value}
+                    value={t.value}
+                    disabled={takenTerms.has(t.value)}
+                  >
                     {t.label}
+                    {takenTerms.has(t.value) ? " (already created)" : ""}
                   </option>
                 ))}
               </Select>
@@ -374,9 +400,7 @@ function NewTermCard({
               <DateInput
                 id="t-start"
                 value={form.startDate}
-                onChange={(value) =>
-                  setForm({ ...form, startDate: value })
-                }
+                onChange={(value) => setForm({ ...form, startDate: value })}
                 required
                 invalid={!!errors.startDate}
               />
@@ -396,6 +420,27 @@ function NewTermCard({
               />
             </Field>
           </div>
+          {needsManualYearId ? (
+            <Field
+              label="Academic year numeric id"
+              htmlFor="t-year-id"
+              required
+              error={errors.manualYearId}
+              hint="This year has no terms yet, and the API doesn't return a year's numeric id — enter it once, and later terms will pick it up automatically."
+            >
+              <Input
+                id="t-year-id"
+                inputMode="numeric"
+                value={form.manualYearId}
+                onChange={(e) =>
+                  setForm({ ...form, manualYearId: e.target.value })
+                }
+                placeholder="e.g. 1"
+                invalid={!!errors.manualYearId}
+                aria-invalid={!!errors.manualYearId}
+              />
+            </Field>
+          ) : null}
           <div className="flex justify-end">
             <Button type="submit" loading={submitting}>
               {submitting ? "Saving…" : "Create term"}
@@ -407,7 +452,21 @@ function NewTermCard({
   );
 }
 
-function YearCard({ year }: { year: AcademicYearResponse }) {
+function YearCard({
+  year,
+  terms,
+}: {
+  year: AcademicYearResponse;
+  terms: AcademicTermRecord[];
+}) {
+  // The merged records, not `year.academicTerms`, so the rows can show the
+  // current-term badge and survive either academic call failing.
+  const createdBy = formatFullName(year.createdByName);
+  const yearTerms = terms.filter(
+    (t) =>
+      t.academicYearName.trim().toLowerCase() === year.name.trim().toLowerCase(),
+  );
+
   return (
     <Card>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-2">
@@ -417,15 +476,14 @@ function YearCard({ year }: { year: AcademicYearResponse }) {
           </h3>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             {formatDate(year.startDate)} – {formatDate(year.endDate)}
-            {year.createdByName ? ` · Created by ${year.createdByName}` : null}
+            {createdBy ? ` · Created by ${createdBy}` : null}
           </p>
         </div>
         <Badge>
-          {year.academicTerms.length}{" "}
-          {year.academicTerms.length === 1 ? "term" : "terms"}
+          {yearTerms.length} {yearTerms.length === 1 ? "term" : "terms"}
         </Badge>
       </header>
-      {year.academicTerms.length === 0 ? (
+      {yearTerms.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
           No terms yet for this year.
         </p>
@@ -440,13 +498,18 @@ function YearCard({ year }: { year: AcademicYearResponse }) {
               </tr>
             </thead>
             <tbody>
-              {year.academicTerms.map((term) => (
+              {yearTerms.map((term) => (
                 <tr
-                  key={term.academicTermId}
+                  key={term.publicId ?? term.academicTermId ?? term.termNumber}
                   className="border-b border-zinc-100 last:border-0 dark:border-zinc-900"
                 >
                   <td className="py-2 pr-4 font-medium text-zinc-900 dark:text-zinc-100">
-                    {termLabel(term.termNumber)}
+                    <span className="inline-flex items-center gap-2">
+                      {termLabel(term.termNumber)}
+                      {term.isCurrent ? (
+                        <Badge variant="success">Current</Badge>
+                      ) : null}
+                    </span>
                   </td>
                   <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-300">
                     {formatDate(term.startDate)}

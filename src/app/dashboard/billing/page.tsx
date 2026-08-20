@@ -10,7 +10,6 @@ import {
   Field,
   Input,
   PageHeader,
-  Select,
 } from "@/components/ui";
 import {
   BillStatusBadge,
@@ -19,8 +18,8 @@ import {
   NumericIdField,
   Pagination,
   StatTile,
-  useAcademicTermRecords,
-  useAcademicTerms,
+  TermSelect,
+  defaultTermValue,
 } from "@/components/billing-ui";
 import { BillingIcon, CashIcon, ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
@@ -30,7 +29,9 @@ import {
   listStudentBills,
 } from "@/lib/billing";
 import { ROUTES } from "@/lib/endpoints";
+import { useAcademicTerms } from "@/lib/use-academic-terms";
 import { formatDate, formatMoney } from "@/lib/utils";
+import type { AcademicTermRecord } from "@/lib/academics";
 import type { ApiError, StudentBillResponse } from "@/lib/types";
 
 const PAGE_SIZE = 10;
@@ -49,6 +50,13 @@ export default function BillingPage() {
   const loading = loadedKey !== fetchKey;
 
   const refresh = useCallback(() => setReloadKey((k) => k + 1), []);
+  // Fetched once for the page: both forms below reference a term, and the
+  // bills table borrows nothing from it.
+  const {
+    terms,
+    loading: termsLoading,
+    error: termsError,
+  } = useAcademicTerms();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -133,8 +141,17 @@ export default function BillingPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <NewBillCard onCreated={refresh} />
-        <CarryForwardCard />
+        <NewBillCard
+          terms={terms}
+          termsLoading={termsLoading}
+          termsError={termsError}
+          onCreated={refresh}
+        />
+        <CarryForwardCard
+          terms={terms}
+          termsLoading={termsLoading}
+          termsError={termsError}
+        />
       </div>
 
       <section className="flex flex-col gap-4">
@@ -259,11 +276,24 @@ function SectionLink({
   );
 }
 
-function NewBillCard({ onCreated }: { onCreated: () => void }) {
+function NewBillCard({
+  terms,
+  termsLoading,
+  termsError,
+  onCreated,
+}: {
+  terms: AcademicTermRecord[];
+  termsLoading: boolean;
+  termsError: string | null;
+  onCreated: () => void;
+}) {
   const { toast } = useToast();
-  const { terms, loading: termsLoading, error: termsError } = useAcademicTerms();
   const [studentId, setStudentId] = useState("");
+  // Left empty until the user picks: the select falls back to the term
+  // covering today, which is the one a bill is opened for in all but the
+  // rarest case.
   const [termId, setTermId] = useState("");
+  const selectedTermId = termId || defaultTermValue(terms, "numeric");
   const [errors, setErrors] = useState<{
     studentId?: string;
     termId?: string;
@@ -279,7 +309,9 @@ function NewBillCard({ onCreated }: { onCreated: () => void }) {
       studentId: /^\d+$/.test(studentId.trim())
         ? undefined
         : "Enter the student's numeric id.",
-      termId: termId ? undefined : "Select the term this bill covers.",
+      termId: selectedTermId
+        ? undefined
+        : "Select the term this bill covers.",
     };
     setErrors(errs);
     if (errs.studentId || errs.termId) return;
@@ -288,7 +320,7 @@ function NewBillCard({ onCreated }: { onCreated: () => void }) {
     try {
       const bill = await createStudentBill({
         studentId: Number(studentId),
-        academicTermId: Number(termId),
+        academicTermId: Number(selectedTermId),
       });
       toast({
         title: "Bill created",
@@ -333,34 +365,16 @@ function NewBillCard({ onCreated }: { onCreated: () => void }) {
           required
           error={errors.studentId}
         />
-        <Field
-          label="Academic term"
-          htmlFor="bill-term"
-          required
+        <TermSelect
+          id="bill-term"
+          value={selectedTermId}
+          onChange={setTermId}
+          terms={terms}
+          loading={termsLoading}
+          idKind="numeric"
           error={errors.termId}
-          hint={
-            termsLoading
-              ? "Loading terms…"
-              : terms.length === 0
-                ? "No terms found — create one under Academics first."
-                : undefined
-          }
-        >
-          <Select
-            id="bill-term"
-            value={termId}
-            onChange={(e) => setTermId(e.target.value)}
-            disabled={termsLoading || terms.length === 0}
-            invalid={!!errors.termId}
-          >
-            <option value="">Select a term…</option>
-            {terms.map((t) => (
-              <option key={t.academicTermId} value={String(t.academicTermId)}>
-                {t.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+          required
+        />
         <div className="flex justify-end">
           <Button type="submit" loading={submitting}>
             {submitting ? "Creating…" : "Create bill"}
@@ -371,9 +385,16 @@ function NewBillCard({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function CarryForwardCard() {
+function CarryForwardCard({
+  terms,
+  termsLoading,
+  termsError,
+}: {
+  terms: AcademicTermRecord[];
+  termsLoading: boolean;
+  termsError: string | null;
+}) {
   const { toast } = useToast();
-  const { terms, loading, error: termsError } = useAcademicTermRecords();
   const [form, setForm] = useState({
     studentId: "",
     previousTermId: "",
@@ -461,50 +482,28 @@ function CarryForwardCard() {
           />
         </Field>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
+          <TermSelect
+            id="cf-prev"
             label="From term"
-            htmlFor="cf-prev"
-            required
+            value={form.previousTermId}
+            onChange={(value) => setForm({ ...form, previousTermId: value })}
+            terms={terms}
+            loading={termsLoading}
+            idKind="public"
             error={errors.previousTermId}
-          >
-            <Select
-              id="cf-prev"
-              value={form.previousTermId}
-              onChange={(e) =>
-                setForm({ ...form, previousTermId: e.target.value })
-              }
-              disabled={loading}
-              invalid={!!errors.previousTermId}
-            >
-              <option value="">Select a term…</option>
-              {terms.map((t) => (
-                <option key={t.publicId} value={t.publicId}>
-                  {t.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field
-            label="To term"
-            htmlFor="cf-new"
             required
+          />
+          <TermSelect
+            id="cf-new"
+            label="To term"
+            value={form.newTermId}
+            onChange={(value) => setForm({ ...form, newTermId: value })}
+            terms={terms}
+            loading={termsLoading}
+            idKind="public"
             error={errors.newTermId}
-          >
-            <Select
-              id="cf-new"
-              value={form.newTermId}
-              onChange={(e) => setForm({ ...form, newTermId: e.target.value })}
-              disabled={loading}
-              invalid={!!errors.newTermId}
-            >
-              <option value="">Select a term…</option>
-              {terms.map((t) => (
-                <option key={t.publicId} value={t.publicId}>
-                  {t.label}
-                </option>
-              ))}
-            </Select>
-          </Field>
+            required
+          />
         </div>
         <div className="flex justify-end">
           <Button type="submit" variant="secondary" loading={submitting}>

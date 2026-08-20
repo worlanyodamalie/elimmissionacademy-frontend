@@ -2,17 +2,12 @@
 
 // Small building blocks shared by the billing and collections pages.
 
-import { useEffect, useState } from "react";
-import { Badge, Button, Card, Field, Input } from "./ui";
-import { apiRequest } from "@/lib/api";
-import { ACADEMICS } from "@/lib/endpoints";
+import { Badge, Button, Card, Field, Input, Select } from "./ui";
+import type { AcademicTermRecord } from "@/lib/academics";
 import { cn, formatEnumLabel, formatMoney } from "@/lib/utils";
 import type {
-  AcademicTermResponse,
-  AcademicYearResponse,
   BillPaymentStatus,
   CashSessionStatus,
-  PageResponse,
   PaymentStatus,
 } from "@/lib/types";
 
@@ -203,101 +198,89 @@ export function NumericIdField({
   );
 }
 
-export type TermOption = {
-  academicTermId: number;
-  label: string;
-};
+// Which identifier a form needs for the term it references: bill creation
+// takes the numeric `academicTermId`, carry-forward takes the term's UUID.
+// See docs/API-GAPS.md §6.
+export type TermIdKind = "numeric" | "public";
 
-// Academic terms, flattened out of the years list, for the "which term is this
-// bill for?" selects. Terms carry a numeric id, so these can be real pickers.
-export function useAcademicTerms(): {
-  terms: TermOption[];
-  loading: boolean;
-  error: string | null;
-} {
-  const [terms, setTerms] = useState<TermOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    apiRequest<PageResponse<AcademicYearResponse> | AcademicYearResponse[]>(
-      ACADEMICS.years,
-      { query: { page: "0", size: "100" }, signal: controller.signal },
-    )
-      .then((data) => {
-        const years = Array.isArray(data) ? data : (data?.content ?? []);
-        setTerms(
-          years.flatMap((year) =>
-            (year.academicTerms ?? []).map((term) => ({
-              academicTermId: term.academicTermId,
-              label: `${year.name} · ${formatEnumLabel(term.termNumber)}`,
-            })),
-          ),
-        );
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(
-          (err as { message?: string }).message ??
-            "Could not load academic terms.",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
-
-  return { terms, loading, error };
+function termOptionValue(
+  term: AcademicTermRecord,
+  idKind: TermIdKind,
+): string | undefined {
+  const id = idKind === "public" ? term.publicId : term.academicTermId;
+  return id === undefined ? undefined : String(id);
 }
 
-export type TermRecord = {
-  publicId: string;
-  label: string;
-};
-
-// Terms keyed by their public UUID — what the arrears endpoint expects. The
-// years list only carries numeric term ids, hence the separate fetch.
-export function useAcademicTermRecords(): {
-  terms: TermRecord[];
+// The term picker used across the billing forms. Terms whose id of the needed
+// kind is missing are left out rather than offered and rejected on submit.
+export function TermSelect({
+  id,
+  label = "Academic term",
+  value,
+  onChange,
+  terms,
+  loading,
+  idKind,
+  error,
+  hint,
+  required,
+}: {
+  id: string;
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  terms: AcademicTermRecord[];
   loading: boolean;
-  error: string | null;
-} {
-  const [terms, setTerms] = useState<TermRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  idKind: TermIdKind;
+  error?: string;
+  hint?: string;
+  required?: boolean;
+}) {
+  const options = terms
+    .map((term) => ({ term, value: termOptionValue(term, idKind) }))
+    .filter((o): o is { term: AcademicTermRecord; value: string } => !!o.value);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    apiRequest<
-      PageResponse<AcademicTermResponse> | AcademicTermResponse[]
-    >(ACADEMICS.terms, {
-      query: { page: "0", size: "100" },
-      signal: controller.signal,
-    })
-      .then((data) => {
-        const list = Array.isArray(data) ? data : (data?.content ?? []);
-        setTerms(
-          list.map((term) => ({
-            publicId: term.publicId,
-            label: `${term.academicYearName} · ${formatEnumLabel(term.termNumber)}`,
-          })),
-        );
-        setError(null);
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(
-          (err as { message?: string }).message ?? "Could not load terms.",
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+  return (
+    <Field
+      label={label}
+      htmlFor={id}
+      required={required}
+      error={error}
+      hint={
+        loading
+          ? "Loading terms…"
+          : options.length === 0
+            ? "No terms found — create one under Academics first."
+            : hint
+      }
+    >
+      <Select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loading || options.length === 0}
+        invalid={!!error}
+        required={required}
+      >
+        <option value="">Select a term…</option>
+        {options.map(({ term, value: optionValue }) => (
+          <option key={optionValue} value={optionValue}>
+            {term.label}
+            {term.isCurrent ? " (current)" : ""}
+          </option>
+        ))}
+      </Select>
+    </Field>
+  );
+}
 
-  return { terms, loading, error };
+// The option a term picker should start on: the term covering today, else the
+// most recent one. Empty string when nothing is selectable yet.
+export function defaultTermValue(
+  terms: AcademicTermRecord[],
+  idKind: TermIdKind,
+): string {
+  const selectable = terms.filter((t) => termOptionValue(t, idKind));
+  const preferred = selectable.find((t) => t.isCurrent) ?? selectable[0];
+  return preferred ? (termOptionValue(preferred, idKind) ?? "") : "";
 }

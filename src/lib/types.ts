@@ -349,7 +349,9 @@ export type AcademicYearResponse = {
   endDate: string;
   academicTerms: AcademicYearTermSummary[];
   createdById: number;
-  createdByName: string;
+  // A `FullName` object, not a string — verified against the deployment
+  // 2026-08-20.
+  createdByName?: FullName;
   createdAt: string;
 };
 
