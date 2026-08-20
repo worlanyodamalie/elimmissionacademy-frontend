@@ -90,6 +90,10 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 
 ### Academics (admin only)
 
+Frontend wrappers: `src/lib/academics.ts` (`loadAcademics` joins the two list
+endpoints so a term carries both its numeric id and its UUID — see
+`docs/API-GAPS.md` §8). React hook: `src/lib/use-academic-terms.ts`.
+
 | Constant                   | Method | Path                                | Body / params                                                                                        | Notes                                       |
 | -------------------------- | ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `ACADEMICS.years`          | POST   | `/school/academics/years`           | `AcademicYearRequest`                                                                                | Creates an academic year.                   |
@@ -97,7 +101,7 @@ All paths are relative to `NEXT_PUBLIC_BACKEND_API_BASE_URL`. Headers:
 | `ACADEMICS.year(publicId)` | GET    | `/school/academics/years/{publicId}` | Path param only.                                                                                    | Single academic year.                       |
 | `ACADEMICS.terms`          | POST   | `/school/academics/terms`           | `AcademicTermRequest` (needs numeric `academicYearId`)                                               | Creates a term under a year.                |
 | `ACADEMICS.terms`          | GET    | `/school/academics/terms`           | Query `?page=&size=&sort=`                                                                           | Paginated terms.                            |
-| `ACADEMICS.term(publicId)` | GET    | `/school/academics/terms/{publicId}` | Path param only.                                                                                    | Single term.                                |
+| `ACADEMICS.term(publicId)` | GET    | `/school/academics/terms/{publicId}` | Path param only.                                                                                    | Single term. Swagger names the path param `academicId`; it is the term's `publicId`. |
 
 ### Billing (admin only)
 
