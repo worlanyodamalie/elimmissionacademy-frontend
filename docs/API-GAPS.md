@@ -491,61 +491,80 @@ system-admin subscription endpoints.*
 
 ---
 
-## 8. Academics — the first term of a year cannot be created · blocking
+## 8. Academics — an academic year cannot be created · blocking
 
-Three findings, all reproduced against `WOR_b8df0` on **2026-08-20**. Together
-they mean the academics feature cannot be used at all on a new school.
+**Rewritten 2026-08-24.** The calendar API changed between 2026-08-20 and
+2026-08-24, and the change is a good one — it dissolves the old §8a rather than
+fixing it. What replaced it is a hard blocker one step earlier.
 
-### 8a. `POST /academics/terms` needs a numeric id that no response returns
+**What changed:** `POST /academics/terms` is gone (now **405 Method Not
+Allowed**). The only write left on a term is
+`PUT /academics/terms/{academicTermId}` with a body of exactly
+`{startDate, endDate}`. `AcademicYearRequest.endDate` also became optional.
 
-`AcademicTermRequest` requires `academicYearId` as an **integer**. The year's
-own responses don't carry one:
+Taken together these say terms are no longer created by clients: the backend
+generates a year's three terms when the year is created, and the client only
+adjusts their dates. That removes the old complaint entirely — the numeric
+`academicYearId` that no response returned was only ever needed by
+`POST /academics/terms`, so nothing needs it now. **No longer requested.**
 
-```
-GET /school/academics/years?page=0&size=50   -> 200
-{"content":[{"publicId":"86bbd90d-1dd2-41fb-b1e1-2217f1a04f2d","schoolId":18,
-  "schoolName":"WorlasSchool","name":"2025/2026","startDate":"2025-08-11",
-  "endDate":"2026-08-20","academicTerms":[],"createdById":14,
-  "createdByName":{...},"createdAt":"..."}], ...}
-```
+### 8a. `POST /academics/years` returns a bare 500 for every valid payload
 
-No `academicYearId`. `GET /school/academics/years/{publicId}` returns the same
-object, so the single-resource read doesn't help either. The only place that
-number appears anywhere in the API is `AcademicTermResponse.academicYearId` —
-on a term that already exists.
-
-**So the first term of any academic year is uncreatable by any client.** Our
-test school is in exactly that state: one year (`2025/2026`), zero terms, and
-no route from the year to the number needed to give it one.
-
-**Ask:** add `academicYearId` to `AcademicYearResponse`, or accept the year's
-`publicId` in `AcademicTermRequest`.
-
-### 8b. A bad `academicYearId` returns a bare 500
+Reproduced against `WOR_b8df0` on **2026-08-21** and again on **2026-08-24**:
 
 ```
-POST /school/academics/terms
-{"academicYearId":999999,"termNumber":"FIRST_TERM",
- "startDate":"2026-01-10","endDate":"2026-01-01"}
+POST /school/academics/years
+{"name":"2039/2040","startDate":"2039-09-01","endDate":"2040-07-31"}
 
--> 500 {"timestamp":"2026-08-20T20:29:36.540+00:00","status":500,
-        "error":"Internal Server Error","path":"/api/v1/school/academics/terms"}
+-> 500 {"timestamp":"2026-08-24T08:04:19.819+00:00","status":500,
+        "error":"Internal Server Error","path":"/api/v1/school/academics/years"}
 ```
 
-Should be a 404 (or 400) naming the missing year. Two things follow from this:
+Six payload variants all 500: with and without `endDate`, `YYYY/YYYY` and
+free-text names, full-year and single-term durations, and a duplicate of the
+existing year (which should be a 409 — the spec documents one).
 
-- Combined with 8a, guessing the id is the only available strategy, and a wrong
-  guess gives no usable feedback while a correct one silently creates a term —
-  with no `DELETE` to undo it (§4).
-- Note that payload also has `endDate` **before** `startDate` and that wasn't
-  rejected either. Worth confirming the term's date range is validated at all,
-  that it must fall inside its academic year, and — importantly — that the year
-  lookup is **scoped to the caller's tenant**. If it isn't, a guessed id could
-  attach a term to another school's academic year.
+**The validation layer is fine**, which is what localises the bug. Bad input is
+rejected cleanly and in RFC 7807 form:
 
-### 8c. A term's two identifiers are split across two endpoints
+```
+{"name":"2040/2041","startDate":"2041-09-01","endDate":"2040-07-31"}
+-> 400 {"title":"Invalid Academic Year Dates","status":400,
+        "detail":"The academic year end date must be after the start date",
+        "properties":{"errorCode":"INVALID_ACADEMIC_YEAR_DATES", ...}}
 
-Neither list response is complete, and both ids are needed:
+{"startDate":"2041-09-01","endDate":"2042-07-31"}          (name omitted)
+-> 400 {"title":"Validation Failed","errorCode":"VALIDATION_FAILED",
+        "errors":[{"field":"name","message":"Academic year name is r..."}]}
+```
+
+So the 500 happens **after** validation passes, in the creation path itself.
+Given that term generation was just moved server-side, the new
+auto-create-terms logic is the obvious suspect.
+
+**Effect:** no academic year can be created, therefore no terms exist, therefore
+nothing downstream that needs a term — billing, enrollment, teacher assignment —
+can be exercised on a new school. Our test school still has the single
+`2025/2026` year it had on 2026-08-20, with `academicTerms: []`.
+
+**Ask:** fix the 500. Please also confirm the intended contract while you're in
+there, because the frontend is built to it and can't verify it: does
+`POST /years` create all three terms, and with what default dates? And should
+`endDate` be omitted (the spec now says optional) so the backend derives it?
+
+### 8b. Nothing back-fills terms for years created before the change
+
+`2025/2026` was created on 2026-08-20 and has `academicTerms: []`. If
+auto-creation only runs on new years, existing years are permanently termless
+with no client-side way to fix them — `POST /terms` is 405 and `PUT` needs a
+term that doesn't exist.
+
+**Ask:** a migration, or a way to generate terms for an existing year.
+
+### 8c. A term's two identifiers are still split across two endpoints
+
+Unchanged, and still load-bearing — if anything more so, since the `PUT` now
+needs the UUID:
 
 | | numeric `academicTermId` | `publicId` (UUID) |
 | --- | --- | --- |
@@ -553,23 +572,33 @@ Neither list response is complete, and both ids are needed:
 | `GET /academics/terms` | ❌ | ✅ |
 
 `POST /payments/student-bills` takes the **numeric** `academicTermId`;
-`POST /payments/student-bills/arrears/carry-forward` takes the term **UUID**.
-Adjacent endpoints, same noun, two id types — so every screen with a term
-picker must fetch both lists and join them on year name + term number.
-`src/lib/academics.ts` (`loadAcademics`) does exactly that.
+`PUT /academics/terms/{...}` and
+`POST /payments/student-bills/arrears/carry-forward` take the term **UUID**.
+So every screen with a term picker must fetch both lists and join them on year
+name + term number. `src/lib/academics.ts` (`loadAcademics`) does exactly that.
+
+Note the `PUT` path param is named `academicTermId` in Swagger but is documented
+as — and behaves as — the term's `publicId`. Passing the numeric id 404s. Worth
+renaming to avoid the next person losing an hour to it.
 
 **Ask:** put both ids on both responses, or settle on one id type across the
 request bodies.
 
 ### Frontend status
 
-`src/lib/academics.ts` wraps all six academic endpoints and does the join;
-`/dashboard/academics` and `/dashboard/billing` both consume it. The billing
-term pickers only offer terms that actually carry the id kind that form needs,
-so they cannot submit an id the endpoint will reject. The one workaround still
-in the UI is on the academics page: for a year with no terms yet, it asks the
-admin to type the numeric year id, because nothing in the API can supply it.
-That input disappears the moment 8a is fixed.
+`src/lib/academics.ts` wraps the five surviving academic endpoints and does the
+join. `/dashboard/academics` lists each year with its terms and lets an admin
+edit any term's dates inline via the `PUT`; `/dashboard/billing` consumes the
+same records for its term pickers, which only offer terms carrying the id kind
+that form needs.
+
+The old workaround — asking the admin to type a numeric year id — is **gone**,
+along with the create-term form, since neither has an endpoint behind it any
+more.
+
+**Untested against real data.** No term has ever existed on the test school, so
+the `PUT` path has only been exercised against a fabricated UUID (a correct
+404). It stays unverified until 8a is fixed.
 
 ---
 
@@ -577,14 +606,14 @@ That input disappears the moment 8a is fixed.
 
 | Priority | Item | Effect once shipped |
 | -------- | ---- | ------------------- |
-| P0 | `academicYearId` on the year response — §8a | Unblocks academic terms entirely; today a new school cannot create its first term |
+| P0 | `POST /academics/years` stops 500ing — §8a | Unblocks the entire calendar; today no school can create a year, so no terms exist at all |
 | P0 | The school's own UUID in login/profile — §O1 | `/dashboard/school` works at all |
 | P0 | Numeric ids on their own resources (or UUIDs accepted in bodies) — §1 | Removes every raw-id input from the UI |
 | P0 | Student + bill identity on line items — §1b | The overdue worklist can name who to chase |
 | P0 | `GET /cash-sessions` — §2 | Replaces the `localStorage` workaround; real "open tills" view |
 | P0 | Sums on filtered queries (or a summary endpoint) — §1c, §7 | Real money totals; unblocks a finance dashboard |
 | P1 | `Page` from `/auth/users/lookup` — §O9 | The directory finds single matches and stops 500ing on common surnames |
-| P1 | 404 instead of 500 on a bad `academicYearId` — §8b | Guessing stops being the only strategy, and stops being dangerous |
+| P1 | Back-fill terms for pre-existing years — §8b | Years created before auto-creation shipped are otherwise permanently termless |
 | P1 | `GET /payments` — §2 | Payment history, daily collections, session reconciliation |
 | P1 | Filters on student bills — §3 | Per-student and per-term bursar screens |
 | P1 | Student list/search — §2 | Student pickers everywhere |
