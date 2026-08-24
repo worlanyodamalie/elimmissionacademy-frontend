@@ -5,26 +5,25 @@
 // complete on its own:
 //
 //   GET /academics/years  -> AcademicYearTermSummary: numeric `academicTermId`,
-//                            but no UUID, and the year's numeric id is absent
-//                            from the year itself.
-//   GET /academics/terms  -> AcademicTermResponse: the term's `publicId` and
-//                            the year's numeric `academicYearId`, but no
-//                            numeric term id.
+//                            but no UUID.
+//   GET /academics/terms  -> AcademicTermResponse: the term's `publicId`, but
+//                            no numeric term id.
 //
-// Requests need one or the other depending on the endpoint (see docs/API-GAPS.md
-// §1 and §6), so `loadAcademics` fetches both and joins them into a single
-// record carrying every identifier the UI might need.
+// Both identifiers are live: creating a bill takes the numeric `academicTermId`,
+// while editing a term's dates takes the `publicId` in the path. So
+// `loadAcademics` fetches both and joins them into a single record carrying
+// every identifier the UI might need (see docs/API-GAPS.md §1 and §6).
 
 import { apiRequest } from "./api";
 import { ACADEMICS } from "./endpoints";
 import { formatEnumLabel } from "./utils";
 import type {
-  AcademicTermRequest,
   AcademicTermResponse,
   AcademicYearRequest,
   AcademicYearResponse,
   PageResponse,
   Term,
+  UpdateTermRequest,
 } from "./types";
 
 export type PageParams = {
@@ -122,12 +121,19 @@ export function getAcademicTerm(
   });
 }
 
-export function createAcademicTerm(
-  body: AcademicTermRequest,
+// Terms can't be created from the client — the backend generates a year's three
+// terms when the year itself is created, and `POST /academics/terms` answers 405
+// (docs/API-GAPS.md §8). Adjusting the dates is the only write available.
+//
+// The path param is the term's `publicId`, despite Swagger naming it
+// `academicTermId`; passing the numeric id 404s.
+export function updateAcademicTerm(
+  termPublicId: string,
+  body: UpdateTermRequest,
   signal?: AbortSignal,
 ): Promise<AcademicTermResponse> {
-  return apiRequest<AcademicTermResponse>(ACADEMICS.terms, {
-    method: "POST",
+  return apiRequest<AcademicTermResponse>(ACADEMICS.term(termPublicId), {
+    method: "PUT",
     body,
     signal,
   });
@@ -153,12 +159,11 @@ export function termLabel(term: Term | string): string {
 // optional because each comes from a different endpoint: if one of the two
 // calls fails, the records still carry whatever the other returned.
 export type AcademicTermRecord = {
-  // From GET /academics/terms. Path params and the carry-forward body take it.
+  // From GET /academics/terms. Editing a term's dates and the carry-forward
+  // body both take it.
   publicId?: string;
   // From the term summaries on GET /academics/years. Bill creation takes it.
   academicTermId?: number;
-  // From GET /academics/terms. Creating a term takes it.
-  academicYearId?: number;
   academicYearName: string;
   termNumber: Term;
   startDate: string;
@@ -222,7 +227,6 @@ export async function loadAcademics(
       const yearName = term.academicYearName ?? "";
       byKey.set(joinKey(yearName, term.termNumber), {
         publicId: term.publicId,
-        academicYearId: term.academicYearId,
         academicYearName: yearName,
         termNumber: term.termNumber,
         startDate: term.startDate,
@@ -248,7 +252,6 @@ export async function loadAcademics(
         } else {
           byKey.set(key, {
             academicTermId: summary.academicTermId,
-            academicYearId: year.academicYearId,
             academicYearName: year.name,
             termNumber: summary.termNumber,
             startDate: summary.startDate,
@@ -265,29 +268,4 @@ export async function loadAcademics(
     years: yearsResult.status === "fulfilled" ? yearsResult.value.content : [],
     terms: [...byKey.values()].sort(byRecencyDesc),
   };
-}
-
-// The year's numeric id, keyed by year name — the only route to it, since
-// `AcademicYearResponse` doesn't carry one (docs/API-GAPS.md §1). A year with
-// no terms yet therefore can't be resolved this way.
-export function yearIdsByName(
-  records: AcademicTermRecord[],
-): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const record of records) {
-    if (typeof record.academicYearId === "number") {
-      map.set(record.academicYearName.trim().toLowerCase(), record.academicYearId);
-    }
-  }
-  return map;
-}
-
-// Resolves a year's numeric id from the year itself where the backend supplies
-// one, otherwise from a sibling term.
-export function resolveAcademicYearId(
-  year: AcademicYearResponse,
-  idsByName: Map<string, number>,
-): number | undefined {
-  if (typeof year.academicYearId === "number") return year.academicYearId;
-  return idsByName.get(year.name.trim().toLowerCase());
 }

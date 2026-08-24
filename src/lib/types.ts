@@ -319,13 +319,15 @@ export type Term = "FIRST_TERM" | "SECOND_TERM" | "THIRD_TERM";
 
 export type AcademicYearRequest = {
   name: string;
+  // Optional per the spec — the backend is meant to derive the year's end from
+  // the terms it generates. Sending it is still accepted.
   startDate: string;
-  endDate: string;
+  endDate?: string;
 };
 
-export type AcademicTermRequest = {
-  academicYearId: number;
-  termNumber: Term;
+// The only write available on a term: its dates. Terms themselves are created
+// by the backend when the academic year is created (docs/API-GAPS.md §8).
+export type UpdateTermRequest = {
   startDate: string;
   endDate: string;
 };
@@ -339,19 +341,15 @@ export type AcademicYearTermSummary = {
 
 export type AcademicYearResponse = {
   publicId: string;
-  // Numeric id used by AcademicTermRequest.academicYearId; not in the sample
-  // response, so treat as possibly absent.
-  academicYearId?: number;
   schoolId: number;
   schoolName: string;
   name: string;
   startDate: string;
   endDate: string;
   academicTerms: AcademicYearTermSummary[];
-  createdById: number;
-  // A `FullName` object, not a string — verified against the deployment
-  // 2026-08-20.
-  createdByName?: FullName;
+  // A plain string, not a `FullName` — verified live 2026-08-24. It was briefly
+  // an object on 2026-08-20; `formatFullName` accepts either.
+  createdByName?: string;
   createdAt: string;
 };
 
