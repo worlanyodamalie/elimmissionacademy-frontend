@@ -7,20 +7,18 @@ import {
   Button,
   Card,
   CardHeader,
-  Field,
-  Input,
   PageHeader,
 } from "@/components/ui";
 import {
   BillStatusBadge,
   EmptyState,
   Money,
-  NumericIdField,
   Pagination,
   StatTile,
   TermSelect,
   defaultTermValue,
 } from "@/components/billing-ui";
+import { StudentLookup } from "@/components/student-lookup";
 import { BillingIcon, CashIcon, ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import {
@@ -32,7 +30,11 @@ import { ROUTES } from "@/lib/endpoints";
 import { useAcademicTerms } from "@/lib/use-academic-terms";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { AcademicTermRecord } from "@/lib/academics";
-import type { ApiError, StudentBillResponse } from "@/lib/types";
+import type {
+  ApiError,
+  StudentBillResponse,
+  StudentSearchResult,
+} from "@/lib/types";
 
 const PAGE_SIZE = 10;
 
@@ -288,7 +290,7 @@ function NewBillCard({
   onCreated: () => void;
 }) {
   const { toast } = useToast();
-  const [studentId, setStudentId] = useState("");
+  const [student, setStudent] = useState<StudentSearchResult | null>(null);
   // Left empty until the user picks: the select falls back to the term
   // covering today, which is the one a bill is opened for in all but the
   // rarest case.
@@ -306,20 +308,18 @@ function NewBillCard({
     setError(null);
 
     const errs = {
-      studentId: /^\d+$/.test(studentId.trim())
-        ? undefined
-        : "Enter the student's numeric id.",
+      studentId: student ? undefined : "Find and pick the student to bill.",
       termId: selectedTermId
         ? undefined
         : "Select the term this bill covers.",
     };
     setErrors(errs);
-    if (errs.studentId || errs.termId) return;
+    if (errs.studentId || errs.termId || !student) return;
 
     setSubmitting(true);
     try {
       const bill = await createStudentBill({
-        studentId: Number(studentId),
+        studentId: student.profileId,
         academicTermId: Number(selectedTermId),
       });
       toast({
@@ -327,7 +327,7 @@ function NewBillCard({
         description: `${bill.billNumber} for ${bill.studentName}.`,
         variant: "success",
       });
-      setStudentId("");
+      setStudent(null);
       onCreated();
     } catch (err) {
       setError((err as ApiError).message ?? "Could not create the bill.");
@@ -357,11 +357,11 @@ function NewBillCard({
         </div>
       ) : null}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <NumericIdField
-          label="Student id"
-          id="bill-student"
-          value={studentId}
-          onChange={setStudentId}
+        <StudentLookup
+          inputId="bill-student"
+          label="Student"
+          selected={student}
+          onSelect={setStudent}
           required
           error={errors.studentId}
         />
@@ -395,8 +395,8 @@ function CarryForwardCard({
   termsError: string | null;
 }) {
   const { toast } = useToast();
+  const [student, setStudent] = useState<StudentSearchResult | null>(null);
   const [form, setForm] = useState({
-    studentId: "",
     previousTermId: "",
     newTermId: "",
   });
@@ -409,9 +409,9 @@ function CarryForwardCard({
     setError(null);
 
     const errs: Record<string, string | undefined> = {
-      studentId: form.studentId.trim()
+      studentId: student
         ? undefined
-        : "Enter the student's public id.",
+        : "Find and pick the student whose arrears move.",
       previousTermId: form.previousTermId
         ? undefined
         : "Select the term the arrears come from.",
@@ -422,12 +422,13 @@ function CarryForwardCard({
           : undefined,
     };
     setErrors(errs);
-    if (Object.values(errs).some(Boolean)) return;
+    if (Object.values(errs).some(Boolean) || !student) return;
 
     setSubmitting(true);
     try {
       await carryForwardArrears({
-        studentId: form.studentId.trim(),
+        // This endpoint takes the student's UUID, not the numeric id.
+        studentId: student.profilePublicId,
         previousTermId: form.previousTermId,
         newTermId: form.newTermId,
       });
@@ -436,7 +437,8 @@ function CarryForwardCard({
         description: "The unpaid balance now sits on the new term's bill.",
         variant: "success",
       });
-      setForm({ studentId: "", previousTermId: "", newTermId: "" });
+      setStudent(null);
+      setForm({ previousTermId: "", newTermId: "" });
     } catch (err) {
       setError((err as ApiError).message ?? "Could not carry forward arrears.");
     } finally {
@@ -465,22 +467,14 @@ function CarryForwardCard({
         </div>
       ) : null}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <Field
-          label="Student public id"
-          htmlFor="cf-student"
+        <StudentLookup
+          inputId="cf-student"
+          label="Student"
+          selected={student}
+          onSelect={setStudent}
           required
           error={errors.studentId}
-          hint="The student's UUID — this endpoint takes UUIDs, not numeric ids."
-        >
-          <Input
-            id="cf-student"
-            value={form.studentId}
-            onChange={(e) => setForm({ ...form, studentId: e.target.value })}
-            placeholder="e.g. 3f1a…-…"
-            invalid={!!errors.studentId}
-            aria-invalid={!!errors.studentId}
-          />
-        </Field>
+        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <TermSelect
             id="cf-prev"

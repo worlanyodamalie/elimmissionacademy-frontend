@@ -59,9 +59,9 @@ on 201.
 
 ## O3. No staff or student lists
 
-Only `GET /auth/users/lookup` and `/auth/users/parents/lookup` exist, both
-requiring a search term. There is no way to list the teachers, head teachers,
-admins or students of a school, so `/dashboard/teachers` and its siblings are
+Only `GET /auth/users/lookup`, `/auth/users/parents/lookup` and
+`/auth/users/students/lookup` exist, all requiring a search term. There is no
+way to list the teachers, head teachers or admins of a school, so `/dashboard/teachers` and its siblings are
 "add" hubs rather than rosters, and nobody can answer "who works here?".
 
 `/auth/users/teachers`, `/head-teachers`, `/admins` and `/students` exist as
@@ -304,7 +304,7 @@ has been created yet, that is a closed loop.
 | `studentBillId` | `POST /payments/bill-line-items/*`, `POST /payments` | `BillLineItemResponse`, `PaymentResponse` | **No** — `StudentBillResponse` has only `publicId`; a bill with no charges exposes nothing |
 | `discountId` | `POST /discounts/rules` | `DiscountRuleResponse.discountId` | **No** — `DiscountResponse` has only `publicId`, and there is no `GET /discounts` (§2) |
 | `cashCollectionSessionId` | `POST /payments` | `PaymentResponse.cashCollectionSessionId` | **No** — `SessionResponse` has only `publicId`; needed *before* the first payment can be taken |
-| `studentId` | `POST /payments/student-bills`, `POST /payments` | `StudentBillResponse`, `PaymentResponse` | **No** — no student list endpoint at all (§2) |
+| `studentId` | `POST /payments/student-bills`, `POST /payments` | `StudentBillResponse`, `PaymentResponse` | **Yes** — `GET /auth/users/students/lookup` returns `profileId` (numeric) and `profilePublicId` (UUID) per match |
 | `academicTermId` | `POST /payments/student-bills` | `AcademicYearResponse.academicTerms[]`, `StudentBillResponse` | **Yes** — the years list carries it |
 | `academicYearId` | `POST /academics/terms` | `AcademicTermResponse`, `StudentBillResponse` | **No** — and this one is a hard blocker; see §8 |
 | `classLevelId` | `POST /payments/service-costs` | `ServiceCostResponse.classLevelId` | **No** — no class-level endpoint, so only levels already priced are discoverable |
@@ -367,8 +367,13 @@ Creating works; finding what was created often doesn't.
 | `GET /cash-sessions` (filter by status, cashier, date) | Show which tills are open. `GET /cash-sessions/{cashSessionId}` exists, so a session can be read *if* you already hold its UUID — which is exactly what nothing hands you. The page remembers UUIDs in `localStorage` (`src/lib/cash-session-store.ts`), a per-device workaround that loses sessions opened elsewhere. |
 | `GET /payments` (filter by student, bill, session, date range) | No payment history, no daily collections report, no receipt reprint, no "payments in this session" list for close-of-day reconciliation. |
 | `GET /discounts` and `GET /discounts/rules`  | The discounts page can only list what the current visit created. |
-| A student list/search (`GET /auth/users/students`) | No student picker anywhere — bills, payments and charge filters all need a typed id. Parents have `parentsLookup`; students have nothing equivalent. |
 | `GET` class levels                           | `ServiceCostRequest.classLevelId` can't be a dropdown. |
+
+*Resolved 2026-08-31: `GET /auth/users/students/lookup?query=` searches the
+school's active students and answers a bare array of
+`{ profileId, profilePublicId, studentNumber, fullName }` — both id flavours
+billing needs. Wired into every student field on the billing screens
+(`src/components/student-lookup.tsx`).*
 
 *Confirmed 2026-08-20: the whole `/school/**` surface is 6 GETs — service
 costs (list + one), student bills (list + one), bill line items (list + one),

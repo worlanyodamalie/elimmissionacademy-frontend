@@ -5,10 +5,8 @@ import { useEffect, useState } from "react";
 import {
   Alert,
   Badge,
-  Button,
   Card,
   Field,
-  Input,
   PageHeader,
   Select,
 } from "@/components/ui";
@@ -19,6 +17,7 @@ import {
   Money,
   Pagination,
 } from "@/components/billing-ui";
+import { StudentLookup } from "@/components/student-lookup";
 import { ChevronRightIcon } from "@/components/icons";
 import { listBillLineItems } from "@/lib/billing";
 import { SERVICE_CATEGORIES } from "@/lib/billing-options";
@@ -36,6 +35,7 @@ import type {
   BillLineItemResponse,
   BillPaymentStatus,
   ServiceCategory,
+  StudentSearchResult,
 } from "@/lib/types";
 
 const PAGE_SIZE = 25;
@@ -65,9 +65,8 @@ export default function OverduePage() {
   const [status, setStatus] = useState<BillPaymentStatus>("UNPAID");
   const [asOf, setAsOf] = useState(todayIso);
   const [category, setCategory] = useState<ServiceCategory | "">("");
-  const [studentId, setStudentId] = useState("");
-  // Applied separately from the inputs so typing a UUID doesn't refetch.
-  const [appliedStudentId, setAppliedStudentId] = useState("");
+  // Picked from the lookup, which hands over the UUID the filter needs.
+  const [student, setStudent] = useState<StudentSearchResult | null>(null);
   const [page, setPage] = useState(0);
 
   const [items, setItems] = useState<BillLineItemResponse[]>([]);
@@ -81,7 +80,7 @@ export default function OverduePage() {
     // "Overdue" is anything whose due date has already arrived.
     dueDateTo: asOf,
     ...(category ? { serviceCategory: category } : {}),
-    ...(appliedStudentId ? { studentId: appliedStudentId } : {}),
+    ...(student ? { studentId: student.profilePublicId } : {}),
   };
   const fetchKey = `${page}|${JSON.stringify(filter)}`;
   const loading = loadedKey !== fetchKey;
@@ -111,9 +110,9 @@ export default function OverduePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, fetchKey]);
 
-  function applyFilters() {
+  function selectStudent(next: StudentSearchResult | null) {
     setPage(0);
-    setAppliedStudentId(studentId.trim());
+    setStudent(next);
   }
 
   return (
@@ -145,13 +144,7 @@ export default function OverduePage() {
       <AgingCounts status={status} asOf={asOf} category={category} />
 
       <Card>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyFilters();
-          }}
-          className="flex flex-col gap-4"
-        >
+        <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div
               className="inline-flex rounded-lg border border-zinc-200 p-0.5 dark:border-zinc-800"
@@ -217,39 +210,15 @@ export default function OverduePage() {
               </Select>
             </Field>
 
-            <Field
+            <StudentLookup
+              inputId="od-student"
               label="Student"
-              htmlFor="od-student"
-              hint="Student's public UUID — press Apply to use it."
-            >
-              <Input
-                id="od-student"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                placeholder="Paste a student UUID"
-              />
-            </Field>
+              hint="Search a student to chase just their overdue charges."
+              selected={student}
+              onSelect={selectStudent}
+            />
           </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {appliedStudentId ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setStudentId("");
-                  setPage(0);
-                  setAppliedStudentId("");
-                }}
-              >
-                Clear student
-              </Button>
-            ) : null}
-            <Button type="submit" variant="secondary" loading={loading}>
-              Apply
-            </Button>
-          </div>
-        </form>
+        </div>
       </Card>
 
       {loadError ? (

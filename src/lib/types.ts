@@ -192,6 +192,17 @@ export type ParentSummary = {
   mobileNumber: string;
 };
 
+// A student returned by the student lookup endpoint
+// (GET /auth/users/students/lookup). It carries both id flavours the billing
+// API asks for: `profileId` is the numeric id that goes in request bodies,
+// `profilePublicId` is the UUID the arrears and line-item filters take.
+export type StudentSearchResult = {
+  profileId: number;
+  profilePublicId: string;
+  studentNumber?: string | null;
+  fullName?: string | null;
+};
+
 // Spring-style paginated response wrapper.
 export type PageResponse<T> = {
   content: T[];

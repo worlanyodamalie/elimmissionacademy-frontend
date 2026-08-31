@@ -17,6 +17,7 @@ import {
 } from "./ui";
 import { Money, NumericIdField, PaymentStatusBadge } from "./billing-ui";
 import { ParentLookup } from "./parent-lookup";
+import { StudentLookup } from "./student-lookup";
 import { useToast } from "./toast";
 import { useAuth } from "@/lib/auth-context";
 import { createPayment } from "@/lib/billing";
@@ -33,6 +34,7 @@ import type {
   ParentSummary,
   PaymentRequest,
   PaymentResponse,
+  StudentSearchResult,
 } from "@/lib/types";
 
 type Props = {
@@ -80,6 +82,9 @@ export function PaymentForm({
   // The parent on record who paid, when there is one. Free-text payee details
   // stay available for anyone who isn't a registered parent.
   const [payer, setPayer] = useState<ParentSummary | null>(null);
+  // Only used when the caller didn't already know the student: picking one
+  // fills `form.studentId` with the numeric id the payment body takes.
+  const [student, setStudent] = useState<StudentSearchResult | null>(null);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +106,11 @@ export function PaymentForm({
       payeeName: `${parent.firstName} ${parent.lastName}`.trim(),
       payeeContact: f.payeeContact.trim() || parent.mobileNumber || "",
     }));
+  }
+
+  function selectStudent(next: StudentSearchResult | null) {
+    setStudent(next);
+    setForm((f) => ({ ...f, studentId: next ? String(next.profileId) : "" }));
   }
 
   function setMethod(method: PaymentMethod) {
@@ -125,7 +135,7 @@ export function PaymentForm({
         : "Enter the school's numeric id.",
       studentId: /^\d+$/.test(form.studentId.trim())
         ? undefined
-        : "Enter the student's numeric id.",
+        : "Find and pick the student this payment is for.",
       cashAmount:
         form.cashAmount.trim() && amount >= 0.01
           ? undefined
@@ -217,11 +227,11 @@ export function PaymentForm({
               />
             </Field>
           ) : (
-            <NumericIdField
-              label="Student id"
-              id="pay-student"
-              value={form.studentId}
-              onChange={(v) => setForm({ ...form, studentId: v })}
+            <StudentLookup
+              inputId="pay-student"
+              label="Student"
+              selected={student}
+              onSelect={selectStudent}
               required
               error={errors.studentId}
             />

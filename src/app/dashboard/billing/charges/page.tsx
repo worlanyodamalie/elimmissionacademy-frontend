@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   Field,
-  Input,
   PageHeader,
   Select,
 } from "@/components/ui";
@@ -19,6 +18,7 @@ import {
   Pagination,
   StatTile,
 } from "@/components/billing-ui";
+import { StudentLookup } from "@/components/student-lookup";
 import { ChevronRightIcon } from "@/components/icons";
 import { listBillLineItems } from "@/lib/billing";
 import {
@@ -32,6 +32,7 @@ import type {
   ApiError,
   BillLineItemFilter,
   BillLineItemResponse,
+  StudentSearchResult,
 } from "@/lib/types";
 
 const PAGE_SIZE = 20;
@@ -43,6 +44,9 @@ export default function ChargesPage() {
   // typing doesn't fire a request per keystroke.
   const [draft, setDraft] = useState<BillLineItemFilter>(EMPTY_FILTER);
   const [filter, setFilter] = useState<BillLineItemFilter>(EMPTY_FILTER);
+  // Held alongside the draft so the picked student stays named in the form;
+  // the filter itself only carries their UUID.
+  const [student, setStudent] = useState<StudentSearchResult | null>(null);
   const [items, setItems] = useState<BillLineItemResponse[]>([]);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -98,8 +102,14 @@ export default function ChargesPage() {
 
   function clearFilters() {
     setPage(0);
+    setStudent(null);
     setDraft(EMPTY_FILTER);
     setFilter(EMPTY_FILTER);
+  }
+
+  function selectStudent(next: StudentSearchResult | null) {
+    setStudent(next);
+    setDraft({ ...draft, studentId: next?.profilePublicId });
   }
 
   return (
@@ -209,20 +219,13 @@ export default function ChargesPage() {
               </Select>
             </Field>
 
-            <Field
+            <StudentLookup
+              inputId="f-student"
               label="Student"
-              htmlFor="f-student"
-              hint="Student's public UUID."
-            >
-              <Input
-                id="f-student"
-                value={draft.studentId ?? ""}
-                onChange={(e) =>
-                  setDraft({ ...draft, studentId: e.target.value || undefined })
-                }
-                placeholder="Paste a student UUID"
-              />
-            </Field>
+              hint="Search a student to see only their charges."
+              selected={student}
+              onSelect={selectStudent}
+            />
 
             <Field label="Due from" htmlFor="f-from">
               <DateInput

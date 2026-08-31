@@ -22,6 +22,10 @@ export const AUTH = {
 export const USERS = {
   students: "/auth/users/students",
   parentsLookup: "/auth/users/parents/lookup",
+  // Active students of the current school. Returns a bare array (no page
+  // wrapper) of `StudentSearchResult`, which carries both id flavours the
+  // billing endpoints need.
+  studentsLookup: "/auth/users/students/lookup",
   // Searches every user in the current school (staff, parents, students).
   lookup: "/auth/users/lookup",
   teachers: "/auth/users/teachers",
