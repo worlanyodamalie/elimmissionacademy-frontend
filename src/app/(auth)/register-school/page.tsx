@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  Alert,
   Button,
   Card,
   Checkbox,
@@ -11,6 +10,11 @@ import {
   Input,
   Select,
 } from "@/components/ui";
+import {
+  FormError,
+  focusFirstError,
+  useFormError,
+} from "@/components/form-error";
 import {
   AddressFields,
   EMPTY_ADDRESS,
@@ -91,7 +95,7 @@ export default function RegisterSchoolPage() {
     mobileNumber: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, errorNonce, setError } = useFormError();
   const [done, setDone] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     schoolName?: string;
@@ -144,7 +148,15 @@ export default function RegisterSchoolPage() {
     );
     setFieldErrors(errors);
     if (hasErrors(errors)) {
-      setError("Please fix the highlighted fields and try again.");
+      // No banner: the field's own inline message says what's wrong, and a
+      // banner by the submit button would be a second thing to read after
+      // we've already scrolled away from it. The address inputs are the one
+      // place the error key and the input id differ.
+      focusFirstError(errors, {
+        addressRegion: "school-region",
+        addressCity: "school-city",
+        addressStreet: "school-street",
+      });
       return;
     }
 
@@ -241,14 +253,6 @@ export default function RegisterSchoolPage() {
             setup link to activate the admin account.
           </p>
         </div>
-
-        {error ? (
-          <div className="mb-4">
-            <Alert variant="error" title="Registration failed">
-              {error}
-            </Alert>
-          </div>
-        ) : null}
 
         <form
           onSubmit={handleSubmit}
@@ -529,6 +533,12 @@ export default function RegisterSchoolPage() {
               </Field>
             </div>
           </section>
+
+          <FormError
+            error={error}
+            nonce={errorNonce}
+            title="Registration failed"
+          />
 
           <div className="flex flex-col-reverse items-stretch gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
             <Link

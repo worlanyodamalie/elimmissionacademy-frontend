@@ -9,6 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Field, Select, Textarea } from "./ui";
+import { FormError, focusFirstError, useFormError } from "./form-error";
 import { DateInput } from "./date-input";
 import { StudentLookup } from "./student-lookup";
 import { useToast } from "./toast";
@@ -66,7 +67,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
 
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, errorNonce, setError } = useFormError();
   const [result, setResult] = useState<StudentEnrolmentResponse | null>(null);
 
   // The enrolment the student already has, if any. A second POST for a student
@@ -129,7 +130,15 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
     if (!selectedYearId) errs.academicYearId = "Choose an academic year.";
     if (!enrolmentDate) errs.enrolmentDate = "Enrolment date is required.";
     setErrors(errs);
-    if (Object.values(errs).some(Boolean)) return;
+    if (Object.values(errs).some(Boolean)) {
+      focusFirstError(errs, {
+        student: "enrol-student",
+        classLevelId: "enrol-class",
+        academicYearId: "enrol-year",
+        enrolmentDate: "enrol-date",
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -340,11 +349,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
           />
         </Field>
 
-        {error ? (
-          <Alert variant="error" title="Could not enrol">
-            {error}
-          </Alert>
-        ) : null}
+        <FormError error={error} nonce={errorNonce} title="Could not enrol" />
 
         <div className="flex justify-end">
           <Button type="submit" loading={submitting} disabled={noYears || noClasses}>

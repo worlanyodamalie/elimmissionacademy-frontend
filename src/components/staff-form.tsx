@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  Alert,
   Button,
   Card,
   Checkbox,
@@ -12,6 +11,7 @@ import {
   Select,
   Textarea,
 } from "./ui";
+import { FormError, focusFirstError, useFormError } from "./form-error";
 import { DateInput } from "./date-input";
 import { AddressFields, EMPTY_ADDRESS } from "./address-fields";
 import { apiRequest } from "@/lib/api";
@@ -88,7 +88,7 @@ export function StaffForm({
   const router = useRouter();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, errorNonce, setError } = useFormError();
   const [isExistingUser, setIsExistingUser] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [profile, setProfile] = useState(EMPTY_PROFILE);
@@ -198,7 +198,15 @@ export function StaffForm({
 
     setFieldErrors(errors);
     if (hasErrors(errors)) {
-      setError("Please fix the highlighted fields and try again.");
+      // Jump to the field rather than raise a banner the user has scrolled
+      // past. These keys don't all match their input ids.
+      focusFirstError(errors, {
+        mobileNumber: "mobile",
+        region: "addr-region",
+        city: "addr-city",
+        street: "addr-street",
+        date: "profileDate",
+      });
       return;
     }
 
@@ -250,14 +258,6 @@ export function StaffForm({
 
   return (
     <Card>
-      {error ? (
-        <div className="mb-4">
-          <Alert variant="error" title="Could not save">
-            {error}
-          </Alert>
-        </div>
-      ) : null}
-
       <form onSubmit={handleSubmit} className="flex flex-col gap-8" noValidate>
         <section className="flex flex-col gap-4">
           <header>
@@ -541,6 +541,12 @@ export function StaffForm({
             ) : null}
           </div>
         </section>
+
+        <FormError
+          error={error}
+          nonce={errorNonce}
+          title={`Could not add ${roleLabel.toLowerCase()}`}
+        />
 
         <div className="flex flex-col-reverse items-stretch gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-end">
           <Button

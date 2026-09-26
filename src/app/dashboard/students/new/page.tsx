@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -23,6 +22,11 @@ import {
 } from "@/components/address-fields";
 import { ChevronRightIcon, PlusIcon } from "@/components/icons";
 import { ParentLookup } from "@/components/parent-lookup";
+import {
+  FormError,
+  focusFirstError,
+  useFormError,
+} from "@/components/form-error";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { ROUTES, USERS } from "@/lib/endpoints";
@@ -108,6 +112,32 @@ const CONTACT_METHODS: { value: PreferredContactMethod; label: string }[] = [
   { value: "WHATSAPP", label: "WhatsApp" },
 ];
 
+// Validation keys don't match the input ids on this form, so `focusFirstError`
+// needs the translation. Anything missing here (the contact-method checkbox
+// group, which has no single focusable input) simply isn't jumped to.
+const STUDENT_FIELD_IDS: Record<string, string> = {
+  firstName: "s-first",
+  lastName: "s-last",
+  dateOfBirth: "s-dob",
+  admissionDate: "s-admission",
+  region: "student-addr-region",
+  city: "student-addr-city",
+  street: "student-addr-street",
+};
+
+// Suffixes only — each parent card prefixes its ids with `p{index}-`.
+const PARENT_FIELD_IDS: Record<string, string> = {
+  parentId: "parent-search",
+  firstName: "first",
+  lastName: "last",
+  email: "email",
+  mobileNumber: "phone",
+  country: "addr-country",
+  region: "addr-region",
+  city: "addr-city",
+  street: "addr-street",
+};
+
 function emptyParent(primary = false, order = 1): ParentDraft {
   return {
     mode: "new",
@@ -150,7 +180,7 @@ export default function NewStudentPage() {
   const [studentAddress, setStudentAddress] = useState<Address>(EMPTY_ADDRESS);
   const [parents, setParents] = useState<ParentDraft[]>([emptyParent(true)]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, errorNonce, setError } = useFormError();
 
   type StudentErrors = {
     firstName?: string;
@@ -306,7 +336,34 @@ export default function NewStudentPage() {
       hasErrors(sErr as Record<string, string | undefined>) ||
       pErrs.some((e) => hasErrors(e as Record<string, string | undefined>))
     ) {
-      setError("Please fix the highlighted fields and try again.");
+      // Jump to the field instead of raising a banner at the bottom of a
+      // thousand-line form. The student section and each parent card are
+      // merged into one lookup keyed by element id, and `focusFirstError`
+      // picks whichever comes first in the document.
+      focusFirstError(
+        {
+          ...(sErr as Record<string, string | undefined>),
+          ...Object.fromEntries(
+            pErrs.flatMap((errs, i) =>
+              Object.entries(errs).map(([key, message]) => [
+                `p${i}-${key}`,
+                message,
+              ]),
+            ),
+          ),
+        },
+        {
+          ...STUDENT_FIELD_IDS,
+          ...Object.fromEntries(
+            pErrs.flatMap((_, i) =>
+              Object.entries(PARENT_FIELD_IDS).map(([key, id]) => [
+                `p${i}-${key}`,
+                `p${i}-${id}`,
+              ]),
+            ),
+          ),
+        },
+      );
       return;
     }
 
@@ -429,12 +486,6 @@ export default function NewStudentPage() {
         title="Enroll a student"
         description="Add a student with their parents or guardians. Parents will receive onboarding emails to set up their accounts."
       />
-
-      {error ? (
-        <Alert variant="error" title="Could not save">
-          {error}
-        </Alert>
-      ) : null}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6" noValidate>
         <Card>
@@ -658,6 +709,12 @@ export default function NewStudentPage() {
             ))}
           </div>
         </Card>
+
+        <FormError
+          error={error}
+          nonce={errorNonce}
+          title="Could not enroll student"
+        />
 
         <div className="flex flex-col-reverse items-stretch gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-end">
           <Button
