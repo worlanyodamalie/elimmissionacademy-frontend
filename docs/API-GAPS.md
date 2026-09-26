@@ -1,6 +1,7 @@
 # API gaps
 
-Two sections: onboarding (schools, staff, users) and billing/collections.
+Three sections: onboarding (schools, staff, users), billing/collections, and
+academic management (classes and enrolments).
 
 Every claim below is checked against the backend's own `/v3/api-docs` and, where
 a request could be made without creating data, against the deployment itself.
@@ -607,6 +608,150 @@ the `PUT` path has only been exercised against a fabricated UUID (a correct
 
 ---
 
+# Academic management — classes and enrolments
+
+Written while building `/dashboard/academics/classes` and
+`/dashboard/academics/enrolments` against the **Academic Management** tag
+(`/api/v1/school/academics/class_levels**` and `**/enrolments**`). Read off
+`/v3/api-docs` on 2026-09-26.
+
+**Unlike the sections above, nothing here was run against the deployment** — no
+token was available in this session. These are contract observations only.
+Where the contract is silent (the untyped `Page` in §A1) that is called out
+rather than assumed away, and each item says what would confirm it.
+
+The seven endpoints are otherwise in good shape — this is the one part of the
+API where creating the resource, listing it and reading one back all exist.
+
+## A1. `ClassLevelResponse` has no `publicId`, but its own paths are keyed by one
+
+The class level's detail and roster endpoints take a **UUID**:
+
+```
+GET /school/academics/class_levels/{classLevelId}            (format: uuid)
+GET /school/academics/class_levels/{classLevelId}/students   (format: uuid)
+```
+
+The responses that produce a class level:
+
+| | numeric `classLevelId` | `classLevelPublicId` (UUID) | |
+| --- | --- | --- | --- |
+| `POST /class_levels` → `ClassLevelResponse` | ✅ | ❌ | documented |
+| `GET /class_levels` → **generic `Page`** | ? | ? | **undocumented — see below** |
+| `GET /class_levels/lookup` → `ClassLevelLookUpResponse` | ✅ | ✅ | documented |
+
+So a class just created **cannot be opened from its own create response** —
+that much is certain from the schema. Only the lookup is documented as carrying
+both ids, and it takes a **required** `query` param, so there is no call that is
+guaranteed to return every class with its UUID.
+
+**The list row's shape is unverified.** `GET /class_levels` declares its 200 as
+the bare `Page` schema, whose `content` is `array of object` — the same
+untyped-`Page` hole as §O4. The backend does emit typed wrappers where it has
+them (`PageAcademicYearResponse`, `PageAcademicTermResponse` both exist); there
+is no `PageClassLevelResponse`. We *assume* the rows are `ClassLevelResponse`
+and therefore lack a UUID, but nothing in the contract says so and we have not
+run the call.
+
+`loadClassLevels` in `src/lib/classes.ts` is written not to depend on the
+answer: it reads a UUID off each list row if one is there (under either
+spelling), and fires one lookup per class name only for the rows that lack one —
+up to thirteen extra requests in the worst case, none in the best. A class the
+lookup doesn't return renders without a roster link and says so.
+
+**To settle it:** one authenticated `GET /school/academics/class_levels` against
+a school that has at least one class. If the rows already carry a UUID, the
+fan-out stops on its own and only the create-response half of this item stands.
+
+**Ask:** add `classLevelPublicId` to `ClassLevelResponse` — it is the same field
+`ClassLevelLookUpResponse` already has — and give the list a typed
+`PageClassLevelResponse` so this is answerable from the contract. Failing that,
+let the detail and roster paths accept the numeric id, or make `query` optional
+on the lookup.
+
+## A2. `AcademicYearResponse` has no numeric id, but enrolment requires one
+
+`StudentEnrolmentRequest.academicYearId` is a numeric `int64`, and
+`AcademicYearResponse` — from both `GET /academics/years` and
+`GET /academics/years/{publicId}` — returns only `publicId` and `schoolId`.
+
+This is §1 and §8c again, one level up: the id an enrolment needs is not on the
+year. It is recoverable, but only sideways, from `AcademicTermResponse`
+(`GET /academics/terms`), which does carry `academicYearId`. So the enrolment
+form loads the **terms** in order to populate a **year** picker
+(`academicYearOptions` in `src/lib/academics.ts`). A year whose terms failed to
+load, or which has none, cannot be offered at all — there is no id to send.
+
+That makes §8b (years created before term auto-creation shipped have no terms)
+worse than it looked: such a year is not merely termless, it is un-enrollable.
+
+**Ask:** put `academicYearId` on `AcademicYearResponse`, or accept the year's
+UUID in `StudentEnrolmentRequest`.
+
+## A3. `POST /auth/users/students` returns a string, so onboarding can't hand the student to enrolment
+
+Creating a student answers `201` with a plain sentence:
+
+```
+"Student and parent(s) created successfully. Onboarding email sent to parent"
+```
+
+No id, no UUID, no body. Enrolment is the step that must follow — a student with
+no class has no roster entry and no term bill — but the client has nothing to
+enrol. Every identifier has to be re-discovered through
+`GET /auth/users/students/lookup`.
+
+`/dashboard/students/new` therefore hands the new student's **name** to
+`/dashboard/academics/enrolments?student=<name>`, which re-runs the lookup and
+selects the student when exactly one row comes back. Two students with the same
+name, or a lookup that hasn't caught up with the write, and the admin picks from
+the list by hand.
+
+**Ask:** return the created `StudentResponse` (or at minimum `profileId` and
+`profilePublicId`) from `POST /auth/users/students`. This is the same shape of
+problem as §1, and the fix unblocks a genuinely automatic onboarding →
+enrolment flow.
+
+## A4. Smaller notes
+
+- **`ClassLevelRequest.classStreams` vs the description.** The endpoint's own
+  description says multiple streams *"requires `streamNames` array"* and shows
+  `["A", "B", "C"]`. The schema has no `streamNames`: it has `classStreams`, an
+  array of `{ classStreamName, priority, classStreamCapacity }`. The schema is
+  what the frontend sends. Worth correcting the prose.
+- **`ClassType` gained two values.** It is now `NURSERY`, `KINDERGARTEN`,
+  `LOWER_PRIMARY`, `UPPER_PRIMARY`, `JUNIOR_HIGH_SCHOOL` — the old single
+  `PRIMARY` is split in two. `src/lib/types.ts` matches the live spec.
+- **No stream endpoints.** The tag's description advertises "stream
+  allocations", but streams can only be created as part of a class level. There
+  is no way to add a stream to an existing class, rename one, change its
+  capacity, or move a student between streams. A school that outgrows one
+  stream has no route forward.
+- **No way to end or change an enrolment.** `EnrolmentStatus` has six values but
+  only `ACTIVE` is reachable: there is no PATCH/PUT to withdraw, transfer,
+  suspend or graduate. `PromotionStatus` exists in the enum catalogue with no
+  endpoint behind it, so end-of-year promotion has to be done as a fresh
+  `NEW_ADMISSION`-shaped POST, which loses the distinction.
+- **Enrolment history is invisible.** `GET /enrolments/student/{id}/enrolment`
+  returns the *active* enrolment only. There is no list, so "which class was
+  this child in last year" cannot be answered.
+- **No roster paging.** `GET /class_levels/{id}/students` returns every student
+  in every stream in one response. Fine at 30 a stream; worth watching.
+
+### Frontend status
+
+`src/lib/classes.ts` wraps all seven endpoints. `/dashboard/academics/classes`
+lists the class levels with their streams and creates new ones;
+`/dashboard/academics/classes/[classLevelId]` shows the roster grouped by
+stream; `/dashboard/academics/enrolments` places a student, warning first if
+they already have an active enrolment (which would 409).
+
+**Untested against real data.** Reproduced from the contract only — the test
+school has no academic year (§8a), and without one no enrolment can be created
+to exercise the read paths against.
+
+---
+
 ## Impact summary for prioritisation
 
 | Priority | Item | Effect once shipped |
@@ -618,7 +763,11 @@ the `PUT` path has only been exercised against a fabricated UUID (a correct
 | P0 | `GET /cash-sessions` — §2 | Replaces the `localStorage` workaround; real "open tills" view |
 | P0 | Sums on filtered queries (or a summary endpoint) — §1c, §7 | Real money totals; unblocks a finance dashboard |
 | P1 | `Page` from `/auth/users/lookup` — §O9 | The directory finds single matches and stops 500ing on common surnames |
-| P1 | Back-fill terms for pre-existing years — §8b | Years created before auto-creation shipped are otherwise permanently termless |
+| P1 | Back-fill terms for pre-existing years — §8b | Years created before auto-creation shipped are otherwise permanently termless — and un-enrollable (§A2) |
+| P1 | `classLevelPublicId` on `ClassLevelResponse` — §A1 | Removes up to 13 lookup round-trips per page load; a class can be opened from the create response that produced it (list-row half unverified) |
+| P1 | `academicYearId` on `AcademicYearResponse` — §A2 | The enrolment form stops loading terms to populate a year picker |
+| P1 | The created student's ids from `POST /auth/users/students` — §A3 | Onboarding hands straight to enrolment instead of re-searching by name |
+| P2 | Stream and enrolment mutations — §A4 | Withdraw, transfer, promote, and grow a class past its first streams |
 | P1 | `GET /payments` — §2 | Payment history, daily collections, session reconciliation |
 | P1 | Filters on student bills — §3 | Per-student and per-term bursar screens |
 | P1 | Student list/search — §2 | Student pickers everywhere |

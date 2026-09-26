@@ -152,7 +152,7 @@ toast: "Password set" → /login?school=ELI_xxxxx
   │   │ DashboardShell                                │
   │   │  - sidebar (Overview, Students, Teachers,     │
   │   │    Head teachers, Admins, People, Academics,  │
-  │   │    Billing, Collections, School)              │
+  │   │    Classes, Billing, Collections, School)     │
   │   │  - school-code badge                          │
   │   │  - user card + sign-out                       │
   │   │  - mobile drawer                              │
@@ -163,7 +163,9 @@ toast: "Password set" → /login?school=ELI_xxxxx
   │             ├ student details (validated: name, DOB ≤ today, address)
   │             ├ N parents/guardians, exactly one primary contact
   │             ├ each parent can copy the student's address
-  │             └ POST /auth/users/students   (USERS.students)
+  │             ├ POST /auth/users/students   (USERS.students)
+  │             └──► /dashboard/academics/enrolments?student=<name>
+  │                    onboarding hands straight over — see 3.6
   │
   ├──► /dashboard/teachers          → /dashboard/teachers/new
   │      └ POST /auth/users/teachers          (USERS.teachers)
@@ -188,7 +190,50 @@ toast: "Password set" → /login?school=ELI_xxxxx
               school UUID is read from the JWT — see docs/API-GAPS.md §O1
 ```
 
-### 3.6 Money in: billing then collecting
+### 3.6 Classes and enrolment: giving a student a place
+
+Onboarding creates the *person*. Enrolment creates their *place* in the school,
+and until it exists there is no class roster entry and nothing to bill against.
+So `/dashboard/students/new` doesn't return to the students hub on success — it
+routes to the enrolment form with the new student's name in the query string.
+
+```
+/dashboard/academics/classes            ← set up once, before anyone enrols
+  ├ GET  /school/academics/class_levels        (CLASSES.classLevels)
+  │    + one GET …/class_levels/lookup per class name, to recover each
+  │      class's UUID — the list doesn't return it (API-GAPS §A1)
+  └ POST /school/academics/class_levels        (CLASSES.classLevels)
+        ├ a GES level (Nursery 1 … Basic 9), optionally renamed locally
+        ├ places per stream
+        └ one "Main" stream, or named streams with a fill rank
+        │
+        ▼
+/dashboard/academics/classes/[classLevelId]   ← the roster, by stream
+  ├ GET …/class_levels/{uuid}                  (CLASSES.classLevel)
+  └ GET …/class_levels/{uuid}/students         (CLASSES.classLevelStudents)
+        │
+        ▼
+/dashboard/academics/enrolments?student=<name>
+  ├ GET  /auth/users/students/lookup           (re-finds the student by name;
+  │        selected outright when exactly one row comes back — API-GAPS §A3)
+  ├ GET  …/enrolments/student/{uuid}/enrolment (warns if already enrolled;
+  │        a 404 here means "not enrolled", which is an ordinary state)
+  └ POST /school/academics/enrolments          (CLASSES.enrolments)
+        the backend picks the stream — first one with room, in fill order —
+        and resolves which term inside the year the placement lands in
+```
+
+The year picker is built from the **terms** call, not the years call: an
+enrolment body takes a numeric `academicYearId` and only `AcademicTermResponse`
+carries one (`academicYearOptions` in `src/lib/academics.ts`, API-GAPS §A2). A
+year with no terms therefore can't be offered at all, and the form says so
+rather than presenting a choice that would 400.
+
+Streams are created with the class and can't be changed afterwards, and an
+enrolment can't be withdrawn, transferred or promoted — no endpoint exists for
+any of it. See [`API-GAPS.md`](./API-GAPS.md) §A4.
+
+### 3.7 Money in: billing then collecting
 
 ```
 /dashboard/billing/service-costs        ← set up once per fee schedule
@@ -366,7 +411,8 @@ src/
 │   │   ├── admins/{page,new/page}.tsx
 │   │   ├── directory/{page,role-change/page}.tsx
 │   │   ├── school/page.tsx      ← school profile + subscription
-│   │   ├── academics/page.tsx
+│   │   ├── academics/              ← page (years + terms), classes,
+│   │   │                              classes/[classLevelId], enrolments
 │   │   ├── billing/                 ← page, bills/[publicId], service-costs,
 │   │   │                              charges, overdue, discounts
 │   │   └── collections/page.tsx
@@ -377,6 +423,8 @@ src/
 │   ├── ui.tsx                   ← Button, Field, Input, Select, Card, Alert, …
 │   ├── billing-ui.tsx           ← status badges, StatTile, Pagination, term hooks
 │   ├── payment-form.tsx         ← shared "record a payment" form
+│   ├── enrolment-form.tsx       ← place a student in a class for a year
+│   ├── student-lookup.tsx       ← debounced student search (pre-fillable)
 │   ├── toast.tsx                ← ToastProvider + useToast()
 │   ├── address-fields.tsx
 │   ├── dashboard-shell.tsx      ← sidebar, topbar, route guard
@@ -388,11 +436,16 @@ src/
 ├── lib/
 │   ├── api.ts                   ← apiRequest, session helpers, decodeJwt
 │   ├── auth-context.tsx         ← useAuth + AuthProvider
+│   ├── academics.ts             ← years + terms, joined across both endpoints
+│   ├── classes.ts               ← class levels, streams and enrolments
+│   ├── use-academic-terms.ts    ← hook over academics.ts
+│   ├── use-class-levels.ts      ← hook over classes.ts
 │   ├── billing.ts               ← typed wrappers for billing/collections
 │   ├── billing-options.ts       ← select options for the billing enums
 │   ├── staff-options.ts         ← select options for the staff/role enums
 │   ├── cash-session-store.ts    ← per-device index of cash sessions
-│   ├── endpoints.ts             ← AUTH, USERS, ACADEMICS, BILLING, … , ROUTES
+│   ├── endpoints.ts             ← AUTH, USERS, ACADEMICS, CLASSES, BILLING,
+│   │                              … , ROUTES
 │   ├── types.ts                 ← all payload + domain types
 │   ├── utils.ts                 ← cn, getInitials, formatRoleLabel
 │   └── validation.ts            ← email, phone, password, …
