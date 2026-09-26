@@ -373,12 +373,22 @@ export default function NewStudentPage() {
         body: payload,
       });
 
+      const fullName = `${student.firstName.trim()} ${student.lastName.trim()}`;
       toast({
-        title: "Student enrolled",
-        description: `${student.firstName} ${student.lastName} has been added. Parents will receive onboarding emails.`,
+        title: "Student added",
+        description: `${fullName} now has a record, and their parents will receive onboarding emails. Next: put them in a class.`,
         variant: "success",
       });
-      router.push(ROUTES.students);
+      // Onboarding creates the person; enrolment creates their place in the
+      // school, and nothing else can happen until it does — no class roster, no
+      // term bill. So the form hands straight over to it rather than dropping
+      // the admin back on the students hub.
+      //
+      // `POST /auth/users/students` answers with a bare string, so the new
+      // student's id never reaches us (docs/API-GAPS.md §A3). The name goes
+      // across instead and the enrolment form re-finds them through the student
+      // lookup, selecting them outright when the search matches one person.
+      router.push(ROUTES.enrolStudent(fullName));
     } catch (err) {
       const apiErr = err as ApiError;
       // The API answers a bare 500 when a new parent's email or mobile already

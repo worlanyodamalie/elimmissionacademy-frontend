@@ -6,7 +6,7 @@
 // flavours the billing API uses, so the caller picks whichever it needs
 // (`profileId` for request bodies, `profilePublicId` for filters and arrears).
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Field, Input } from "./ui";
 import { apiRequest } from "@/lib/api";
 import { USERS } from "@/lib/endpoints";
@@ -22,6 +22,13 @@ type Props = {
   label?: string;
   hint?: string;
   required?: boolean;
+  // Pre-fills the search box, e.g. with the name of the student who was just
+  // onboarded. Read once; typing after that is the user's own.
+  initialQuery?: string;
+  // With `initialQuery`, pick the student automatically when that search comes
+  // back with exactly one match, so a hand-off lands on a filled-in form rather
+  // than a search result the user has to click.
+  autoSelectSingleMatch?: boolean;
 };
 
 export function studentLabel(student: StudentSearchResult): string {
@@ -36,14 +43,20 @@ export function StudentLookup({
   label = "Find student",
   hint = "Search by name or student number.",
   required = false,
+  initialQuery = "",
+  autoSelectSingleMatch = false,
 }: Props) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<StudentSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  // Auto-selection is a one-off courtesy for the pre-filled search. Once the
+  // user edits the box, or clears a selection, their next search is theirs.
+  const autoSelectRef = useRef(autoSelectSingleMatch && !!initialQuery.trim());
 
   function handleQueryChange(value: string) {
+    autoSelectRef.current = false;
     setQuery(value);
     setSearchError(null);
     if (value.trim().length < 2) {
@@ -68,8 +81,13 @@ export function StudentLookup({
         });
         // The endpoint answers with a bare array; tolerate a page wrapper in
         // case it grows pagination like the parent lookup has.
-        setResults(Array.isArray(data) ? data : (data?.content ?? []));
+        const found = Array.isArray(data) ? data : (data?.content ?? []);
+        setResults(found);
         setSearched(true);
+        if (autoSelectRef.current && found.length === 1) {
+          autoSelectRef.current = false;
+          onSelect(found[0]);
+        }
       } catch (err) {
         if (!controller.signal.aborted) {
           setResults([]);
@@ -86,6 +104,10 @@ export function StudentLookup({
       controller.abort();
       clearTimeout(timer);
     };
+    // `onSelect` is only read inside the auto-select branch, which disarms
+    // itself; re-running the search because the parent re-rendered would fire a
+    // second request for the same query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
   if (selected) {

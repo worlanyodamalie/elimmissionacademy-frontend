@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useState } from "react";
 import {
   Alert,
@@ -11,6 +12,7 @@ import {
   PageHeader,
 } from "@/components/ui";
 import { DateInput } from "@/components/date-input";
+import { ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import {
   createAcademicYear,
@@ -18,6 +20,7 @@ import {
   updateAcademicTerm,
   type AcademicTermRecord,
 } from "@/lib/academics";
+import { ROUTES } from "@/lib/endpoints";
 import { useAcademicTerms } from "@/lib/use-academic-terms";
 import { formatDate, formatFullName } from "@/lib/utils";
 import { hasErrors, validateAll } from "@/lib/validation";
@@ -48,6 +51,15 @@ export default function AcademicsPage() {
       <PageHeader
         title="Academics"
         description="Set up academic years and adjust their term dates. Terms drive enrollment, billing cycles, and teacher assignments."
+        action={
+          <Link
+            href={ROUTES.classes}
+            className="inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+          >
+            Classes and enrolment
+            <ChevronRightIcon className="h-4 w-4" />
+          </Link>
+        }
       />
 
       {error ? (

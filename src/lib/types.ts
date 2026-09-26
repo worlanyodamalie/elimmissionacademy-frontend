@@ -377,6 +377,156 @@ export type AcademicTermResponse = {
   updatedAt: string;
 };
 
+// --- Academic management: class levels, streams and enrolments -----------
+
+// The Ghana Education Service ladder. A school picks one of these per class
+// level; `customClassName` is what the school calls it locally ("Grade 1").
+export type StandardGESClassLevel =
+  | "NURSERY_1"
+  | "NURSERY_2"
+  | "KINDERGARTEN_1"
+  | "KINDERGARTEN_2"
+  | "BASIC_1"
+  | "BASIC_2"
+  | "BASIC_3"
+  | "BASIC_4"
+  | "BASIC_5"
+  | "BASIC_6"
+  | "BASIC_7"
+  | "BASIC_8"
+  | "BASIC_9";
+
+// Derived by the backend from the GES level — not something the client sends.
+export type ClassType =
+  | "NURSERY"
+  | "KINDERGARTEN"
+  | "LOWER_PRIMARY"
+  | "UPPER_PRIMARY"
+  | "JUNIOR_HIGH_SCHOOL";
+
+export type EnrolmentType =
+  | "NEW_ADMISSION"
+  | "PROMOTION"
+  | "TRANSFER_IN"
+  | "RE_ADMISSION";
+
+export type EnrolmentStatus =
+  | "ACTIVE"
+  | "SUSPENDED"
+  | "WITHDRAWN"
+  | "TRANSFERRED"
+  | "COMPLETED"
+  | "GRADUATED";
+
+// One stream of a class level, e.g. "Basic 1 A". `priority` decides which
+// stream the enrolment endpoint fills first; lower rank wins.
+export type ClassStreamRequest = {
+  classStreamName: string;
+  priority: number;
+  classStreamCapacity?: number;
+};
+
+export type ClassLevelRequest = {
+  standardGESClassLevel: StandardGESClassLevel;
+  customClassName?: string;
+  hasMultipleStreams: boolean;
+  // Only read when `hasMultipleStreams` is true — a single-stream class gets a
+  // "Main" stream created for it automatically.
+  classStreams?: ClassStreamRequest[];
+  // Capacity of the default stream, and the fallback for any stream in
+  // `classStreams` that doesn't set its own.
+  defaultStreamOrClassCapacity: number;
+};
+
+export type ClassStreamResponse = {
+  id: number;
+  streamName: string;
+  fullName: string;
+  enrollmentCapacity: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// Note: no `publicId`. The detail and students endpoints are keyed by the class
+// level's UUID, which only the lookup response carries — see
+// docs/API-GAPS.md §A1.
+export type ClassLevelResponse = {
+  classLevelId: number;
+  schoolId: number;
+  className: string;
+  code: string;
+  academicLevel: number;
+  classType: ClassType;
+  hasMultipleStreams: boolean;
+  streams: ClassStreamResponse[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ClassLevelLookUpResponse = {
+  classLevelId: number;
+  classLevelPublicId: string;
+  className: string;
+  code: string;
+  academicLevel: number;
+  classType: ClassType;
+};
+
+export type ClassStudentSummary = {
+  studentId: string;
+  admissionNumber?: string | null;
+  fullName?: string | null;
+  gender?: Gender;
+  enrolmentStatus?: EnrolmentStatus;
+};
+
+export type ClassStreamStudentsResponse = {
+  streamId: string;
+  streamName: string;
+  fullName: string;
+  capacity: number;
+  students: ClassStudentSummary[];
+};
+
+export type ClassLevelStudentsGroupedResponse = {
+  classLevelId: string;
+  className: string;
+  hasMultipleStreams: boolean;
+  streams: ClassStreamStudentsResponse[];
+};
+
+// `studentId` and `classLevelId` are the numeric ids (the student lookup's
+// `profileId` and the class lookup's `classLevelId`); `academicYearId` is the
+// numeric year id, which only `GET /academics/terms` returns. The backend picks
+// the stream and resolves the term inside the year on its own.
+export type StudentEnrolmentRequest = {
+  studentId: number;
+  classLevelId: number;
+  academicYearId: number;
+  enrolmentDate?: string;
+  enrolmentType: EnrolmentType;
+  remarks?: string;
+};
+
+export type StudentEnrolmentResponse = {
+  publicId: string;
+  studentPublicId: string;
+  studentFullName: string;
+  classStreamPublicId: string;
+  classStreamFullName: string;
+  classLevelPublicId: string;
+  className: string;
+  academicYearPublicId: string;
+  academicYearName: string;
+  academicTermPublicId: string;
+  academicTermName: string;
+  status: EnrolmentStatus;
+  enrolmentType: EnrolmentType;
+  enrolmentDate: string;
+  remarks?: string | null;
+  createdAt: string;
+};
+
 export type StudentStatus =
   | "ACTIVE"
   | "GRADUATED"

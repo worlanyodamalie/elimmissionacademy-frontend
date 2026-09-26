@@ -164,6 +164,9 @@ export type AcademicTermRecord = {
   publicId?: string;
   // From the term summaries on GET /academics/years. Bill creation takes it.
   academicTermId?: number;
+  // From GET /academics/terms — the only place the year's numeric id surfaces.
+  // Enrolling a student takes it (see `academicYearOptions`).
+  academicYearId?: number;
   academicYearName: string;
   termNumber: Term;
   startDate: string;
@@ -200,10 +203,55 @@ function byRecencyDesc(a: AcademicTermRecord, b: AcademicTermRecord): number {
   return TERM_ORDER.indexOf(b.termNumber) - TERM_ORDER.indexOf(a.termNumber);
 }
 
+// A year reduced to what a picker needs. `academicYearId` is the numeric id
+// that `POST /academics/enrolments` takes; `AcademicYearResponse` doesn't carry
+// one, so it is recovered from the year's terms (docs/API-GAPS.md §A2).
+export type AcademicYearOption = {
+  academicYearId: number;
+  name: string;
+  publicId?: string;
+  startDate?: string;
+  endDate?: string;
+  // One of the year's terms covers today.
+  isCurrent: boolean;
+};
+
 export type AcademicsSnapshot = {
   years: AcademicYearResponse[];
   terms: AcademicTermRecord[];
 };
+
+// Years that can actually be used in an enrolment body, newest first. A year
+// whose terms all failed to load has no numeric id and is left out rather than
+// offered as a choice that would 400.
+export function academicYearOptions(
+  snapshot: AcademicsSnapshot,
+): AcademicYearOption[] {
+  const byId = new Map<number, AcademicYearOption>();
+  for (const term of snapshot.terms) {
+    if (term.academicYearId === undefined) continue;
+    const existing = byId.get(term.academicYearId);
+    if (existing) {
+      existing.isCurrent ||= term.isCurrent;
+      continue;
+    }
+    const year = snapshot.years.find(
+      (y) =>
+        y.name.trim().toLowerCase() ===
+        term.academicYearName.trim().toLowerCase(),
+    );
+    byId.set(term.academicYearId, {
+      academicYearId: term.academicYearId,
+      name: term.academicYearName,
+      publicId: year?.publicId,
+      startDate: year?.startDate,
+      endDate: year?.endDate,
+      isCurrent: term.isCurrent,
+    });
+  }
+  // `terms` is already most-recent-first, and Map preserves insertion order.
+  return [...byId.values()];
+}
 
 // Fetches both endpoints and joins them. A failure in either call is tolerated
 // as long as the other succeeds — the records are simply missing that call's
@@ -227,6 +275,7 @@ export async function loadAcademics(
       const yearName = term.academicYearName ?? "";
       byKey.set(joinKey(yearName, term.termNumber), {
         publicId: term.publicId,
+        academicYearId: term.academicYearId,
         academicYearName: yearName,
         termNumber: term.termNumber,
         startDate: term.startDate,

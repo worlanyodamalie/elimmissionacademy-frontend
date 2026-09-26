@@ -12,6 +12,7 @@ import {
   BillingIcon,
   CalendarIcon,
   CashIcon,
+  ClassIcon,
   CloseIcon,
   HeadTeacherIcon,
   HomeIcon,
@@ -28,6 +29,10 @@ type NavItem = {
   label: string;
   description?: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  // Extra route prefixes this item owns, for pages that sit outside its own
+  // path. Highlighting is longest-prefix, so a nested route lights up only its
+  // own item and not the parent whose path it happens to start with.
+  alsoActiveFor?: string[];
 };
 
 const NAV: NavItem[] = [
@@ -74,6 +79,13 @@ const NAV: NavItem[] = [
     icon: CalendarIcon,
   },
   {
+    href: ROUTES.classes,
+    label: "Classes",
+    description: "Class levels, streams, enrolment",
+    icon: ClassIcon,
+    alsoActiveFor: [ROUTES.enrolments],
+  },
+  {
     href: ROUTES.billing,
     label: "Billing",
     description: "Bills, price list, discounts",
@@ -109,6 +121,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [session, loading, router, pathname]);
 
   const closeSidebar = () => setSidebarOpen(false);
+
+  // The nav item whose route prefix matches the current path most closely. The
+  // overview is an exact match only — every other path starts with it.
+  const activeHref = NAV.flatMap((item) =>
+    [item.href, ...(item.alsoActiveFor ?? [])].map((prefix) => ({
+      href: item.href,
+      prefix,
+    })),
+  )
+    .filter(({ prefix }) =>
+      prefix === ROUTES.dashboard
+        ? pathname === ROUTES.dashboard
+        : pathname?.startsWith(prefix),
+    )
+    .sort((a, b) => b.prefix.length - a.prefix.length)[0]?.href;
 
   if (loading || !session) {
     return (
@@ -175,10 +202,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <ul className="flex flex-col gap-1">
             {NAV.map((item) => {
               const Icon = item.icon;
-              const active =
-                item.href === ROUTES.dashboard
-                  ? pathname === ROUTES.dashboard
-                  : pathname?.startsWith(item.href);
+              const active = item.href === activeHref;
               return (
                 <li key={item.href}>
                   <Link
