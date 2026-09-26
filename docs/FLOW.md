@@ -321,12 +321,12 @@ Every form follows the same shape so the UX feels consistent:
 2. handleSubmit:
         ├ e.preventDefault()
         ├ validateAll(values, rules)  ← lib/validation.ts
-        ├ if errors → setFieldErrors + return (no network call)
+        ├ if errors → setFieldErrors + focusFirstError + return (no network call)
         ├ setSubmitting(true)
         ├ apiRequest(endpoint, { method, body, query, schoolCode? })
         │       │
         │       ├ on success → toast.success + redirect / reset / show success card
-        │       └ on failure → alert with normalized message
+        │       └ on failure → setError → <FormError> beside the submit button
         └ finally: setSubmitting(false)
 ```
 
@@ -341,8 +341,33 @@ Every form follows the same shape so the UX feels consistent:
 - `<Field>` wraps every input with label, hint, and red error text.
 - Inputs accept `invalid` to switch to the error border.
 - `aria-invalid` is set when a field is in error.
-- A summary `<Alert variant="error">` appears at the top of the form when
-  the API rejects the submission, so screen readers hear it once.
+
+**Where an error appears** (`src/components/form-error.tsx`). The top of a long
+form is the one place we know the user isn't looking, having just clicked submit
+at the bottom, so nothing is reported there:
+
+- **Validation** — `focusFirstError` scrolls to the offending field and puts the
+  cursor in it. The field's own inline message is the explanation; there is no
+  banner, which would only be a second thing to scroll back to. "First" is
+  decided by document order, and `idsByKey` maps a validation key to its input
+  id where the two differ (they usually do — `dateOfBirth` → `s-dob`, and each
+  parent card on `students/new` prefixes its ids with `p{index}-`).
+- **Server** — nothing in the form is identifiably at fault, so `<FormError>`
+  renders beside the submit button, where the user already is. It scrolls itself
+  into view only if it isn't already visible, and takes focus so screen readers
+  catch it.
+
+Neither auto-dismisses; both are things the user has to act on. This is also why
+errors don't go through the toast system — toasts here mean "it worked", are
+`role="status"` rather than `role="alert"`, and vanish after five seconds.
+
+`useFormError()` replaces a plain `useState<string | null>` and carries a nonce,
+so resubmitting and getting the same message back re-announces it instead of
+looking like nothing happened.
+
+Adopted on the four forms long enough for it to matter — registration,
+`students/new`, the staff form and the enrolment form. Short forms that never
+scroll still render their `<Alert variant="error">` inline.
 
 ---
 
@@ -423,6 +448,7 @@ src/
 │   ├── ui.tsx                   ← Button, Field, Input, Select, Card, Alert, …
 │   ├── billing-ui.tsx           ← status badges, StatTile, Pagination, term hooks
 │   ├── payment-form.tsx         ← shared "record a payment" form
+│   ├── form-error.tsx           ← submit errors: jump to field / show at button
 │   ├── enrolment-form.tsx       ← place a student in a class for a year
 │   ├── student-lookup.tsx       ← debounced student search (pre-fillable)
 │   ├── toast.tsx                ← ToastProvider + useToast()
