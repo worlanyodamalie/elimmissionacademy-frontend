@@ -46,6 +46,9 @@ These are the Next.js routes a user can visit in the browser.
 | `/dashboard/directory/role-change` | Transfer someone to another role, or add a second one.        | authenticated admin |
 | `/dashboard/school`                | School profile: registration details and subscription.        | authenticated admin |
 | `/dashboard/academics`             | Manage academic years and terms.                              | authenticated admin |
+| `/dashboard/academics/classes`     | Class levels and their streams; add a class level.            | authenticated admin |
+| `/dashboard/academics/classes/[classLevelId]` | One class level's roster, grouped by stream. The segment is the class level's **UUID**. | authenticated admin |
+| `/dashboard/academics/enrolments?student=<name>` | Place a student in a class for an academic year. `student` pre-fills the search — how student onboarding hands over. | authenticated admin |
 | `/dashboard/billing`               | Student bills hub: open a bill, carry arrears forward.        | authenticated admin |
 | `/dashboard/billing/bills/[publicId]` | One bill: charges, add a charge, record a payment.         | authenticated admin |
 | `/dashboard/billing/service-costs` | The price list — what each service costs.                     | authenticated admin |
@@ -103,6 +106,22 @@ endpoints so a term carries both its numeric id and its UUID — see
 | `ACADEMICS.term(publicId)` | PUT    | `/school/academics/terms/{publicId}` | `UpdateTermRequest` (`startDate`, `endDate`)                                                        | Updates a term's dates. Terms are created by the backend with the year — `POST` here is 405. |
 | `ACADEMICS.terms`          | GET    | `/school/academics/terms`           | Query `?page=&size=&sort=`                                                                           | Paginated terms.                            |
 | `ACADEMICS.term(publicId)` | GET    | `/school/academics/terms/{publicId}` | Path param only.                                                                                    | Single term. Swagger names the path param `academicId`; it is the term's `publicId`. |
+
+### Academic management — classes and enrolments (admin only)
+
+Frontend wrappers: `src/lib/classes.ts` (`loadClassLevels` recovers each class
+level's UUID from the lookup — see `docs/API-GAPS.md` §A1). React hook:
+`src/lib/use-class-levels.ts`.
+
+| Constant                              | Method | Path                                                     | Body / params                                        | Notes                                                                                                                  |
+| ------------------------------------- | ------ | -------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `CLASSES.classLevels`                 | POST   | `/school/academics/class_levels`                         | `ClassLevelRequest`                                  | Creates a class level and provisions its streams. One `"Main"` stream unless `hasMultipleStreams` is set. 409 if the level already exists. |
+| `CLASSES.classLevels`                 | GET    | `/school/academics/class_levels`                         | Query `?page=&size=&sort=`                           | Paginated class levels. Carries the numeric `classLevelId` but **no UUID**.                                             |
+| `CLASSES.classLevelsLookup`           | GET    | `/school/academics/class_levels/lookup`                  | Query `?query=` (**required**)                       | The only response pairing `classLevelId` with `classLevelPublicId`. No "list all" form — the param is mandatory.        |
+| `CLASSES.classLevel(uuid)`            | GET    | `/school/academics/class_levels/{classLevelId}`          | Path param is the **UUID**.                          | One class level with its streams and capacities.                                                                        |
+| `CLASSES.classLevelStudents(uuid)`    | GET    | `/school/academics/class_levels/{classLevelId}/students` | Path param is the **UUID**.                          | Active students grouped by stream. A single-stream class reports one group.                                             |
+| `CLASSES.enrolments`                  | POST   | `/school/academics/enrolments`                           | `StudentEnrolmentRequest` (all ids **numeric**)      | Enrols a student. The backend picks the stream by fill rank, skipping full ones, and resolves the term inside the year. 409 when already enrolled or every stream is full. |
+| `CLASSES.studentEnrolment(uuid)`      | GET    | `/school/academics/enrolments/student/{studentId}/enrolment` | Path param is the student profile's **UUID**.   | The student's active enrolment. 404 means "not enrolled", which the UI treats as an ordinary state.                      |
 
 ### Billing (admin only)
 

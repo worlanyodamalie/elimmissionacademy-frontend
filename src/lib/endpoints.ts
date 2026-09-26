@@ -49,6 +49,26 @@ export const ACADEMICS = {
   term: (publicId: string) => `/school/academics/terms/${publicId}`,
 } as const;
 
+// Academic management: the classes a school teaches, the streams inside them,
+// and which class each student sits in for a given year.
+export const CLASSES = {
+  classLevels: "/school/academics/class_levels",
+  // Takes the class level's public UUID, not the numeric `classLevelId` that
+  // the list and create responses carry. Only the lookup hands out the UUID.
+  classLevel: (classLevelPublicId: string) =>
+    `/school/academics/class_levels/${classLevelPublicId}`,
+  // Search-as-you-type over class levels. The only response that carries both
+  // the numeric id (for enrolment bodies) and the UUID (for the paths above).
+  classLevelsLookup: "/school/academics/class_levels/lookup",
+  // Active students of a class level, grouped by stream.
+  classLevelStudents: (classLevelPublicId: string) =>
+    `/school/academics/class_levels/${classLevelPublicId}/students`,
+  enrolments: "/school/academics/enrolments",
+  // Takes the student's profile UUID (`profilePublicId` from the lookup).
+  studentEnrolment: (studentPublicId: string) =>
+    `/school/academics/enrolments/student/${studentPublicId}/enrolment`,
+} as const;
+
 // Billing: service costs (the price list), student bills (per term) and the
 // bill line items that make up a bill.
 export const BILLING = {
@@ -108,6 +128,16 @@ export const ROUTES = {
   roleChange: "/dashboard/directory/role-change",
   school: "/dashboard/school",
   academics: "/dashboard/academics",
+  classes: "/dashboard/academics/classes",
+  classLevel: (classLevelPublicId: string) =>
+    `/dashboard/academics/classes/${classLevelPublicId}`,
+  enrolments: "/dashboard/academics/enrolments",
+  // `student` pre-fills the student search on the enrolment form — how student
+  // onboarding hands off to enrolment.
+  enrolStudent: (query?: string) =>
+    query
+      ? `/dashboard/academics/enrolments?student=${encodeURIComponent(query)}`
+      : "/dashboard/academics/enrolments",
   billing: "/dashboard/billing",
   bill: (publicId: string) => `/dashboard/billing/bills/${publicId}`,
   serviceCosts: "/dashboard/billing/service-costs",
