@@ -201,7 +201,9 @@ routes to the enrolment form with the new student's name in the query string.
 /dashboard/academics/classes            ← set up once, before anyone enrols
   ├ GET  /school/academics/class_levels        (CLASSES.classLevels)
   │    + one GET …/class_levels/lookup per class name, to recover each
-  │      class's UUID — the list doesn't return it (API-GAPS §A1)
+  │      class's UUID — the list doesn't return it (API-GAPS §A1). Only this
+  │      hub pays that cost: it needs the streams the list carries *and* the
+  │      UUID it doesn't. Forms that merely name a class use the lookup alone.
   └ POST /school/academics/class_levels        (CLASSES.classLevels)
         ├ a GES level (Nursery 1 … Basic 9), optionally renamed locally
         ├ places per stream
@@ -216,12 +218,21 @@ routes to the enrolment form with the new student's name in the query string.
 /dashboard/academics/enrolments?student=<name>
   ├ GET  /auth/users/students/lookup           (re-finds the student by name;
   │        selected outright when exactly one row comes back — API-GAPS §A3)
+  ├ GET  …/class_levels/lookup?query=          (ClassLevelLookup: the class
+  │        picker searches this endpoint directly — one request, and the row
+  │        carries the numeric classLevelId the POST below needs)
   ├ GET  …/enrolments/student/{uuid}/enrolment (warns if already enrolled;
   │        a 404 here means "not enrolled", which is an ordinary state)
   └ POST /school/academics/enrolments          (CLASSES.enrolments)
         the backend picks the stream — first one with room, in fill order —
         and resolves which term inside the year the placement lands in
 ```
+
+The class picker searches `…/class_levels/lookup` as you type rather than
+loading every class up front. That endpoint is the only one returning the
+numeric `classLevelId` *and* the UUID together, so a form needing the numeric
+id gets it in a single request — where building the same picker from the list
+would mean the hub's fan-out to recover ids the form never even uses.
 
 The year picker is built from the **terms** call, not the years call: an
 enrolment body takes a numeric `academicYearId` and only `AcademicTermResponse`
@@ -449,6 +460,7 @@ src/
 │   ├── billing-ui.tsx           ← status badges, StatTile, Pagination, term hooks
 │   ├── payment-form.tsx         ← shared "record a payment" form
 │   ├── form-error.tsx           ← submit errors: jump to field / show at button
+│   ├── class-level-lookup.tsx   ← debounced class search (numeric id + UUID)
 │   ├── enrolment-form.tsx       ← place a student in a class for a year
 │   ├── student-lookup.tsx       ← debounced student search (pre-fillable)
 │   ├── toast.tsx                ← ToastProvider + useToast()
