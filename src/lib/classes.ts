@@ -3,16 +3,16 @@
 //
 // Same two-identifier problem as the academic calendar, in a sharper form:
 //
-//   GET  /academics/class_levels         -> an untyped `Page`; assumed to hold
-//                                           `ClassLevelResponse`, which has a
-//                                           numeric `classLevelId` and no UUID.
+//   GET  /academics/class_levels         -> `ClassLevelResponse`: the streams,
+//                                           a numeric `classLevelId`, no UUID.
 //   GET  /academics/class_levels/lookup  -> ClassLevelLookUpResponse: both the
 //                                           numeric id and `classLevelPublicId`.
 //   GET  /academics/class_levels/{uuid}  -> keyed by the UUID.
 //
-// So the list alone cannot link to a class level's own page. `loadClassLevels`
-// lists the classes and then recovers their UUIDs from the lookup, joining on
-// the numeric id (docs/API-GAPS.md §A1).
+// So the list alone cannot link to a class level's own page, and the lookup
+// alone can't show a class's streams. `loadClassLevels` calls both and joins on
+// the numeric id (docs/API-GAPS.md §A1). A **blank** lookup query returns every
+// class, so that costs one request, not one per class.
 
 import { apiRequest } from "./api";
 import { CLASSES } from "./endpoints";
@@ -75,22 +75,34 @@ export async function listClassLevels(
   );
 }
 
-// The picker path: one request, and the response carries both the numeric id an
-// enrolment body takes and the UUID the class-level pages are keyed by. Prefer
-// this over `loadClassLevels` wherever a form just needs to name a class.
+// The one call that returns both ids: the numeric `classLevelId` an enrolment
+// body takes and the `classLevelPublicId` the class-level pages are keyed by.
 //
-// `query` is a required request param, so there is no "list everything" call
-// here — a blank search is answered locally rather than with a guaranteed 400.
+// A **blank** query returns every class — verified against the deployment on
+// 2026-09-28. Omitting the param entirely is a 400, so the two are not the
+// same thing, and `apiRequest` drops query values that are empty strings.
+// Hence the literal `?query=` in the path for the list-all case: it survives
+// because nothing later overwrites it.
 export async function lookupClassLevels(
   query: string,
   signal?: AbortSignal,
 ): Promise<ClassLevelLookUpResponse[]> {
-  if (!query.trim()) return [];
+  const term = query.trim();
   const data = await apiRequest<
     ClassLevelLookUpResponse[] | PageResponse<ClassLevelLookUpResponse> | null
-  >(CLASSES.classLevelsLookup, { query: { query }, signal });
+  >(term ? CLASSES.classLevelsLookup : `${CLASSES.classLevelsLookup}?query=`, {
+    query: term ? { query: term } : undefined,
+    signal,
+  });
   if (!data) return [];
   return Array.isArray(data) ? data : (data.content ?? []);
+}
+
+// Every class the school teaches, each with both of its ids. One request.
+export function listAllClassLevelsForPicker(
+  signal?: AbortSignal,
+): Promise<ClassLevelLookUpResponse[]> {
+  return lookupClassLevels("", signal);
 }
 
 export function getClassLevel(
@@ -181,13 +193,10 @@ function byAcademicLevel(a: ClassLevelRecord, b: ClassLevelRecord): number {
 
 // A UUID carried on a list row, if the row happens to have one.
 //
-// `GET /class_levels` declares its 200 as the *generic* `Page`, whose `content`
-// is an untyped `array of object` — the spec never says which DTO comes back.
-// `ClassLevelResponse` (what `POST` returns) has no UUID, so the assumption
-// below is that the list rows match it. That assumption is unverified, so
-// rather than bet on it we read a UUID off the row when one is there under
-// either spelling, and only pay for the lookup on rows that need it. If the
-// backend already sends it, or starts to, the fan-out disappears by itself.
+// It doesn't today: `GET /class_levels` rows are `ClassLevelResponse`, with no
+// UUID under any spelling (verified 2026-09-28). Checking anyway costs nothing
+// and means this quietly stops making the second request if the backend ever
+// adds the field — the ask in docs/API-GAPS.md §A1.
 function publicIdOnRow(level: ClassLevelResponse): string | undefined {
   const row = level as ClassLevelResponse & {
     classLevelPublicId?: unknown;
@@ -197,56 +206,40 @@ function publicIdOnRow(level: ClassLevelResponse): string | undefined {
   return typeof candidate === "string" && candidate ? candidate : undefined;
 }
 
-// Lists the class levels, then recovers any missing UUIDs from the lookup.
+// Every class level with its streams *and* its UUID — the two things no single
+// response carries together.
 //
-// The lookup is the only response the spec documents as pairing the numeric id
-// with the UUID, and it insists on a search term, so there is no single call
-// that returns them all. Searching for each distinct class name covers the list
-// exactly, and a school has at most thirteen of them. Results are joined on the
-// numeric id, so a search that happens to match several classes is still placed
-// correctly.
+// Two requests, in parallel: the list supplies the streams, the blank lookup
+// supplies the UUIDs, and they join on the numeric id. Only the classes hub
+// needs this pairing; anything that just has to name a class should call
+// `listAllClassLevelsForPicker` on its own.
 //
 // A failing lookup is tolerated: the classes still render, they just can't be
-// opened. See docs/API-GAPS.md §A1 for the ask.
+// opened. See docs/API-GAPS.md §A1 for the ask that would remove it entirely.
 export async function loadClassLevels(
   signal?: AbortSignal,
 ): Promise<ClassLevelRecord[]> {
-  const list = await listClassLevels(ALL, signal);
+  const [listResult, lookupResult] = await Promise.allSettled([
+    listClassLevels(ALL, signal),
+    listAllClassLevelsForPicker(signal),
+  ]);
+
+  if (listResult.status === "rejected") throw listResult.reason;
 
   const publicIds = new Map<number, string>();
-  for (const level of list.content) {
-    const onRow = publicIdOnRow(level);
-    if (onRow) publicIds.set(level.classLevelId, onRow);
-  }
-
-  // Only the rows the list didn't already identify.
-  const names = [
-    ...new Set(
-      list.content
-        .filter((l) => !publicIds.has(l.classLevelId))
-        .map((l) => l.className?.trim())
-        .filter(Boolean),
-    ),
-  ] as string[];
-
-  if (names.length > 0) {
-    const lookups = await Promise.allSettled(
-      names.map((name) => lookupClassLevels(name, signal)),
-    );
-    for (const result of lookups) {
-      if (result.status !== "fulfilled") continue;
-      for (const entry of result.value) {
-        if (entry.classLevelId !== undefined && entry.classLevelPublicId) {
-          publicIds.set(entry.classLevelId, entry.classLevelPublicId);
-        }
+  if (lookupResult.status === "fulfilled") {
+    for (const entry of lookupResult.value) {
+      if (entry.classLevelId !== undefined && entry.classLevelPublicId) {
+        publicIds.set(entry.classLevelId, entry.classLevelPublicId);
       }
     }
   }
 
-  return list.content
+  return listResult.value.content
     .map((level) => ({
       ...level,
-      classLevelPublicId: publicIds.get(level.classLevelId),
+      classLevelPublicId:
+        publicIdOnRow(level) ?? publicIds.get(level.classLevelId),
     }))
     .sort(byAcademicLevel);
 }

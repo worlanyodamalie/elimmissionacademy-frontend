@@ -278,10 +278,12 @@ export async function loadAcademics(
         academicYearId: term.academicYearId,
         academicYearName: yearName,
         termNumber: term.termNumber,
-        startDate: term.startDate,
-        endDate: term.endDate,
+        // "" rather than null: every consumer already treats empty as
+        // "no date set", and it keeps the record's own type free of nulls.
+        startDate: term.startDate ?? "",
+        endDate: term.endDate ?? "",
         label: `${yearName} · ${termLabel(term.termNumber)}`,
-        isCurrent: coversToday(term.startDate, term.endDate),
+        isCurrent: coversToday(term.startDate ?? "", term.endDate ?? ""),
       });
     }
   }
@@ -295,18 +297,21 @@ export async function loadAcademics(
           existing.academicTermId = summary.academicTermId;
           // The year list is the authority on the year's own name and, where
           // the terms call didn't run, on the dates.
-          existing.startDate ||= summary.startDate;
-          existing.endDate ||= summary.endDate;
+          existing.startDate ||= summary.startDate ?? "";
+          existing.endDate ||= summary.endDate ?? "";
           existing.isCurrent = coversToday(existing.startDate, existing.endDate);
         } else {
           byKey.set(key, {
             academicTermId: summary.academicTermId,
             academicYearName: year.name,
             termNumber: summary.termNumber,
-            startDate: summary.startDate,
-            endDate: summary.endDate,
+            startDate: summary.startDate ?? "",
+            endDate: summary.endDate ?? "",
             label: `${year.name} · ${termLabel(summary.termNumber)}`,
-            isCurrent: coversToday(summary.startDate, summary.endDate),
+            isCurrent: coversToday(
+              summary.startDate ?? "",
+              summary.endDate ?? "",
+            ),
           });
         }
       }

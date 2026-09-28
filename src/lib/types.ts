@@ -346,8 +346,11 @@ export type UpdateTermRequest = {
 export type AcademicYearTermSummary = {
   academicTermId: number;
   termNumber: Term;
-  startDate: string;
-  endDate: string;
+  // Null until an admin fills them in: creating a year auto-creates its three
+  // terms but only stamps the year's own outer bounds onto the first and last
+  // (verified 2026-09-28). See docs/API-GAPS.md §8d.
+  startDate: string | null;
+  endDate: string | null;
 };
 
 export type AcademicYearResponse = {
@@ -371,8 +374,9 @@ export type AcademicTermResponse = {
   academicYearId: number;
   academicYearName: string;
   termNumber: Term;
-  startDate: string;
-  endDate: string;
+  // Nullable for the same reason as `AcademicYearTermSummary` above.
+  startDate: string | null;
+  endDate: string | null;
   createdAt: string;
   updatedAt: string;
 };

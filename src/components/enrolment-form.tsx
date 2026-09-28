@@ -12,9 +12,9 @@ import { Alert, Badge, Button, Card, Field, Select, Textarea } from "./ui";
 import { FormError, focusFirstError, useFormError } from "./form-error";
 import { DateInput } from "./date-input";
 import { StudentLookup } from "./student-lookup";
-import { ClassLevelLookup } from "./class-level-lookup";
+import { ClassLevelSelect } from "./class-level-select";
 import { useToast } from "./toast";
-import { academicYearOptions } from "@/lib/academics";
+import { academicYearOptions, termLabel } from "@/lib/academics";
 import {
   ENROLMENT_TYPES,
   enrolStudent,
@@ -126,7 +126,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
 
     const errs: Errors = {};
     if (!student) errs.student = "Search for and select a student.";
-    if (!classLevel) errs.classLevelId = "Search for and select a class.";
+    if (!classLevel) errs.classLevelId = "Choose a class.";
     if (!selectedYearId) errs.academicYearId = "Choose an academic year.";
     if (!enrolmentDate) errs.enrolmentDate = "Enrolment date is required.";
     setErrors(errs);
@@ -162,9 +162,15 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
       onEnrolled?.(enrolment);
     } catch (err) {
       const apiErr = err as ApiError;
-      // 409 is the common one: already enrolled for this year, or every stream
-      // in the class is full. The backend's own message says which.
-      setError(apiErr.message?.trim() || "Could not enrol the student.");
+      // A duplicate enrolment answers 409 with nothing but "A resource with
+      // the provided details already exists" (verified 2026-09-28) — it never
+      // says whether the student is already placed or the class is full. Name
+      // both, since the admin can't tell them apart from the body.
+      setError(
+        apiErr.status === 409
+          ? "Could not enrol: either this student already has a place for that academic year, or every stream in the class is full."
+          : apiErr.message?.trim() || "Could not enrol the student.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -178,7 +184,10 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
             {result.studentFullName} has been placed in{" "}
             {result.classStreamFullName ?? result.className} for{" "}
             {result.academicYearName}
-            {result.academicTermName ? ` (${result.academicTermName})` : ""}.
+            {result.academicTermName
+              ? ` (${termLabel(result.academicTermName)})`
+              : ""}
+            .
           </Alert>
           <EnrolmentSummary enrolment={result} />
           <div className="flex justify-end">
@@ -237,7 +246,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
         ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <ClassLevelLookup
+          <ClassLevelSelect
             inputId="enrol-class"
             selected={classLevel}
             onSelect={setClassLevel}
@@ -344,7 +353,13 @@ export function EnrolmentSummary({
   const rows: { label: string; value: string }[] = [
     { label: "Class", value: enrolment.classStreamFullName || enrolment.className },
     { label: "Academic year", value: enrolment.academicYearName },
-    { label: "Term", value: enrolment.academicTermName },
+    // `academicTermName` is the raw enum — "FIRST_TERM", not "First term".
+    {
+      label: "Term",
+      value: enrolment.academicTermName
+        ? termLabel(enrolment.academicTermName)
+        : "",
+    },
     { label: "Enrolled", value: formatDate(enrolment.enrolmentDate) },
   ];
   return (
