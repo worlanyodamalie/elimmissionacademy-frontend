@@ -200,10 +200,11 @@ routes to the enrolment form with the new student's name in the query string.
 ```
 /dashboard/academics/classes            ← set up once, before anyone enrols
   ├ GET  /school/academics/class_levels        (CLASSES.classLevels)
-  │    + one GET …/class_levels/lookup per class name, to recover each
-  │      class's UUID — the list doesn't return it (API-GAPS §A1). Only this
-  │      hub pays that cost: it needs the streams the list carries *and* the
-  │      UUID it doesn't. Forms that merely name a class use the lookup alone.
+  │    + GET …/class_levels/lookup?query=     ← blank query = every class,
+  │      in one request, and the only response carrying the UUID the list
+  │      omits (API-GAPS §A1). The two run in parallel and join on the
+  │      numeric id. Only this hub needs both: it shows each class's streams
+  │      (list only) and links to its roster (UUID only).
   └ POST /school/academics/class_levels        (CLASSES.classLevels)
         ├ a GES level (Nursery 1 … Basic 9), optionally renamed locally
         ├ places per stream
@@ -218,9 +219,9 @@ routes to the enrolment form with the new student's name in the query string.
 /dashboard/academics/enrolments?student=<name>
   ├ GET  /auth/users/students/lookup           (re-finds the student by name;
   │        selected outright when exactly one row comes back — API-GAPS §A3)
-  ├ GET  …/class_levels/lookup?query=          (ClassLevelLookup: the class
-  │        picker searches this endpoint directly — one request, and the row
-  │        carries the numeric classLevelId the POST below needs)
+  ├ GET  …/class_levels/lookup?query=          (ClassLevelSelect: one request
+  │        for every class, each row carrying the numeric classLevelId the
+  │        POST below needs — no list call at all)
   ├ GET  …/enrolments/student/{uuid}/enrolment (warns if already enrolled;
   │        a 404 here means "not enrolled", which is an ordinary state)
   └ POST /school/academics/enrolments          (CLASSES.enrolments)
@@ -228,17 +229,23 @@ routes to the enrolment form with the new student's name in the query string.
         and resolves which term inside the year the placement lands in
 ```
 
-The class picker searches `…/class_levels/lookup` as you type rather than
-loading every class up front. That endpoint is the only one returning the
-numeric `classLevelId` *and* the UUID together, so a form needing the numeric
-id gets it in a single request — where building the same picker from the list
-would mean the hub's fan-out to recover ids the form never even uses.
+The class picker reads `…/class_levels/lookup?query=` — a blank query returns
+every class, and it is the only response pairing the numeric `classLevelId` an
+enrolment body needs with the UUID the class pages use. One request, no list
+call. It's a `<select>` rather than a search box because
+`StandardGESClassLevel` has thirteen values, so a school can never have more
+classes than fit in a dropdown.
 
 The year picker is built from the **terms** call, not the years call: an
 enrolment body takes a numeric `academicYearId` and only `AcademicTermResponse`
 carries one (`academicYearOptions` in `src/lib/academics.ts`, API-GAPS §A2). A
 year with no terms therefore can't be offered at all, and the form says so
 rather than presenting a choice that would 400.
+
+Note that a **freshly created year has no usable term dates** — the backend
+auto-creates three terms but only stamps the year's own bounds on the outer two
+(API-GAPS §8d). So nothing is "current" until an admin edits them, and the year
+picker won't preselect. The enrolment POST still resolves a term regardless.
 
 Streams are created with the class and can't be changed afterwards, and an
 enrolment can't be withdrawn, transferred or promoted — no endpoint exists for
@@ -460,7 +467,7 @@ src/
 │   ├── billing-ui.tsx           ← status badges, StatTile, Pagination, term hooks
 │   ├── payment-form.tsx         ← shared "record a payment" form
 │   ├── form-error.tsx           ← submit errors: jump to field / show at button
-│   ├── class-level-lookup.tsx   ← debounced class search (numeric id + UUID)
+│   ├── class-level-select.tsx   ← class picker, one blank-query lookup
 │   ├── enrolment-form.tsx       ← place a student in a class for a year
 │   ├── student-lookup.tsx       ← debounced student search (pre-fillable)
 │   ├── toast.tsx                ← ToastProvider + useToast()

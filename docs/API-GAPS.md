@@ -514,7 +514,23 @@ adjusts their dates. That removes the old complaint entirely — the numeric
 `academicYearId` that no response returned was only ever needed by
 `POST /academics/terms`, so nothing needs it now. **No longer requested.**
 
-### 8a. `POST /academics/years` returns a bare 500 for every valid payload
+### 8a. `POST /academics/years` returns a bare 500 for every valid payload — **FIXED**
+
+**Resolved as of 2026-09-28.** The call now succeeds against `WOR_9fe69`:
+
+```
+POST /school/academics/years
+{"name":"2026/2027 Academic Year","startDate":"2026-09-01","endDate":"2027-07-31"}
+
+-> 201 {"publicId":"4a4b1bb2-…","schoolId":2,"name":"2026/2027 Academic Year",
+        "academicTerms":[{"academicTermId":4,"termNumber":"FIRST_TERM",…},…]}
+```
+
+Three terms are auto-created, as intended — though not with usable dates, which
+is now §8d. This unblocks the whole calendar, and with it enrolment and billing,
+both of which need a term. The original report is kept below for history.
+
+---
 
 Reproduced against `WOR_b8df0` on **2026-08-21** and again on **2026-08-24**:
 
@@ -590,6 +606,34 @@ renaming to avoid the next person losing an hour to it.
 **Ask:** put both ids on both responses, or settle on one id type across the
 request bodies.
 
+### 8d. Auto-created terms have no usable dates
+
+Creating a year stamps only the year's own bounds onto the outer two terms and
+leaves everything else null (2026-09-28):
+
+| term | startDate | endDate |
+| --- | --- | --- |
+| FIRST_TERM | `2026-09-01` (the year's start) | `null` |
+| SECOND_TERM | `null` | `null` |
+| THIRD_TERM | `null` | `2027-07-31` (the year's end) |
+
+Consequences for any client:
+
+- **Nothing is ever the "current" term** on a fresh year, because no term has
+  both bounds. Term pickers can't preselect, and the academics page shows no
+  current-term badge until an admin edits all three by hand.
+- `AcademicTermResponse.startDate` / `.endDate` are **nullable**, which the
+  spec types as plain `string`. `src/lib/types.ts` marks them
+  `string | null` and `loadAcademics` normalises to `""`.
+
+An admin must open each term and set its dates via the `PUT` before the
+calendar is usable. That is three edits per year, every year, to supply dates
+the backend could divide itself.
+
+**Ask:** either split the year evenly across three terms on creation, or
+document the dates as required admin setup and surface a warning until they're
+filled in.
+
 ### Frontend status
 
 `src/lib/academics.ts` wraps the five surviving academic endpoints and does the
@@ -615,10 +659,10 @@ Written while building `/dashboard/academics/classes` and
 (`/api/v1/school/academics/class_levels**` and `**/enrolments**`). Read off
 `/v3/api-docs` on 2026-09-26.
 
-**Unlike the sections above, nothing here was run against the deployment** — no
-token was available in this session. These are contract observations only.
-Where the contract is silent (the untyped `Page` in §A1) that is called out
-rather than assumed away, and each item says what would confirm it.
+**Verified against the deployment on 2026-09-28** on test school `WOR_9fe69`
+(schoolId 2), by creating an academic year, a class level with two streams, a
+student with a parent, and an enrolment, then reading everything back. Every
+response matched the types in `src/lib/types.ts` except the term dates (§8d).
 
 The seven endpoints are otherwise in good shape — this is the one part of the
 API where creating the resource, listing it and reading one back all exist.
@@ -645,29 +689,34 @@ that much is certain from the schema. Only the lookup is documented as carrying
 both ids, and it takes a **required** `query` param, so there is no call that is
 guaranteed to return every class with its UUID.
 
-**The list row's shape is unverified.** `GET /class_levels` declares its 200 as
-the bare `Page` schema, whose `content` is `array of object` — the same
-untyped-`Page` hole as §O4. The backend does emit typed wrappers where it has
-them (`PageAcademicYearResponse`, `PageAcademicTermResponse` both exist); there
-is no `PageClassLevelResponse`. We *assume* the rows are `ClassLevelResponse`
-and therefore lack a UUID, but nothing in the contract says so and we have not
-run the call.
+**Settled 2026-09-28.** `GET /class_levels` rows really are
+`ClassLevelResponse` and carry no UUID under any spelling — so the list cannot
+link to the pages that read from it. (The 200 is still declared as the bare
+`Page` schema, `content: array of object`, the same untyped-`Page` hole as §O4;
+a `PageClassLevelResponse` would make this answerable from the contract.)
 
-`loadClassLevels` in `src/lib/classes.ts` is written not to depend on the
-answer: it reads a UUID off each list row if one is there (under either
-spelling), and fires one lookup per class name only for the rows that lack one —
-up to thirteen extra requests in the worst case, none in the best. A class the
-lookup doesn't return renders without a roster link and says so.
+**But a blank query is the list-all call.** `?query=` returns every class with
+both ids, 200:
 
-**To settle it:** one authenticated `GET /school/academics/class_levels` against
-a school that has at least one class. If the rows already carry a UUID, the
-fan-out stops on its own and only the create-response half of this item stands.
+```
+GET /class_levels/lookup?query=      -> 200 [ {classLevelId, classLevelPublicId, …} ]
+GET /class_levels/lookup             -> 400 (the param is required)
+```
+
+The two are not the same: omitting the param is a validation error, sending it
+empty is a match-all. So recovering the UUIDs costs **one** request, not one
+per class, and `loadClassLevels` now issues the list and one blank lookup in
+parallel and joins them on the numeric id. The list is still needed only
+because the lookup response omits `streams`.
+
+Anything that merely has to *name* a class skips the list entirely and calls
+the lookup alone — `ClassLevelSelect` does this.
 
 **Ask:** add `classLevelPublicId` to `ClassLevelResponse` — it is the same field
 `ClassLevelLookUpResponse` already has — and give the list a typed
-`PageClassLevelResponse` so this is answerable from the contract. Failing that,
-let the detail and roster paths accept the numeric id, or make `query` optional
-on the lookup.
+`PageClassLevelResponse` so this is answerable from the contract. That would
+drop the second request altogether. Lower priority now that the blank-query
+workaround is one call rather than thirteen.
 
 ## A2. `AcademicYearResponse` has no numeric id, but enrolment requires one
 
@@ -685,12 +734,18 @@ load, or which has none, cannot be offered at all — there is no id to send.
 That makes §8b (years created before term auto-creation shipped have no terms)
 worse than it looked: such a year is not merely termless, it is un-enrollable.
 
+**Confirmed 2026-09-28.** The year came back as
+`{publicId: "4a4b…", schoolId: 2, …}` with no numeric id of its own, while each
+of its terms carried `academicYearId: 2`. The enrolment POST was accepted with
+that 2, so the sideways route works — it just shouldn't be necessary.
+
 **Ask:** put `academicYearId` on `AcademicYearResponse`, or accept the year's
 UUID in `StudentEnrolmentRequest`.
 
 ## A3. `POST /auth/users/students` returns a string, so onboarding can't hand the student to enrolment
 
-Creating a student answers `201` with a plain sentence:
+**Confirmed 2026-09-28.** Creating a student answers `201` with a plain
+sentence and nothing else:
 
 ```
 "Student and parent(s) created successfully. Onboarding email sent to parent"
@@ -756,7 +811,8 @@ to exercise the read paths against.
 
 | Priority | Item | Effect once shipped |
 | -------- | ---- | ------------------- |
-| P0 | `POST /academics/years` stops 500ing — §8a | Unblocks the entire calendar; today no school can create a year, so no terms exist at all |
+| ~~P0~~ | ~~`POST /academics/years` stops 500ing — §8a~~ | **Shipped.** Verified 2026-09-28; the calendar, enrolment and billing are unblocked |
+| P1 | Terms created with real dates — §8d | Removes three manual edits per year, and lets any term picker preselect the current term |
 | P0 | The school's own UUID in login/profile — §O1 | `/dashboard/school` works at all |
 | P0 | Numeric ids on their own resources (or UUIDs accepted in bodies) — §1 | Removes every raw-id input from the UI |
 | P0 | Student + bill identity on line items — §1b | The overdue worklist can name who to chase |
