@@ -68,6 +68,23 @@ Pages can override either header (`schoolCode`, `token` options) for the
 public flows where the user types the school code in the form before they
 have a session.
 
+**Expiry.** The access token lasts an hour and there is no way to renew it —
+login returns a `refreshToken` but no endpoint redeems it
+([`API-GAPS.md`](./API-GAPS.md) §O12). So `apiRequest` ends the session rather
+than letting it rot:
+
+- before sending, if the *stored* token's `exp` has passed (30s skew), the
+  request isn't made at all;
+- a 401 whose `www-authenticate` says `invalid_token` counts too, because an
+  expired token answers with an empty body and the reason only in that header;
+- either way the session is cleared and a flag set, `DashboardShell`'s
+  existing "no session" effect redirects to `/login?from=<path>`, and the
+  login page says the session expired and returns the user to where they were.
+
+A token passed explicitly by the caller (`options.token`, used by the
+password-setup links) is never treated this way, so a failed sign-in is not
+mistaken for a lapsed session.
+
 ---
 
 ## 3. The user journeys

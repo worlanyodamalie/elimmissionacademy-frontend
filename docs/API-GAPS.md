@@ -255,24 +255,49 @@ only a problem because the second half of the pattern is missing.
 access token (and ideally a rotated refresh token). The frontend can then renew
 in the background and the hourly logout disappears.
 
-**Frontend position until then:** the dashboard does **not** act on expiry at
-all. It doesn't read `exp`, doesn't run a logout timer, and doesn't clear the
-session on a 401. That is a deliberate decision, not an oversight — without a
-renewal endpoint, honouring expiry means signing every user out once an hour,
-mid-task, with no way to get back except retyping their credentials. Leaving the
-session in place is the lesser harm while §O12 is open.
+Still true on **2026-09-28**: a fresh login returns `accessToken`,
+`refreshToken` (492 chars), `tokenType: "Bearer"` and `expiresIn: 3600000`, and
+there is still no endpoint to redeem the refresh token.
 
-The cost of that choice, so it's visible: once the hour is up, every request
-fails with a 401 whose body the UI surfaces as a generic error, and the user has
-to sign out and back in manually to recover. It also ignores `refreshToken`
+**What an expired token looks like on the wire** (verified 2026-09-28):
+
+```
+GET /school/academics/class_levels     (token expired at 14:22:20Z)
+-> 401, EMPTY BODY
+   www-authenticate: Bearer error="invalid_token",
+     error_description="An error occurred while attempting to decode the Jwt:
+                        Jwt expired at 2026-09-28T14:22:20Z"
+```
+
+The body is empty, so the reason is *only* in the `www-authenticate` header.
+Any client that reads errors from the response body — as `apiRequest` does —
+sees nothing and falls back to a generic message.
+
+**Frontend position until then — changed 2026-09-28.** The dashboard now
+detects expiry and signs the user out deliberately: `apiRequest` checks the
+stored token's `exp` before sending (30s skew), treats a 401 carrying
+`invalid_token` as a lapsed session, clears the session, and flags it. The
+dashboard shell's existing "no session → /login?from=…" redirect does the rest,
+and the login page explains why the user is there.
+
+This replaces the previous position, which was to ignore expiry entirely on the
+grounds that an hourly forced logout was the greater harm. That reasoning
+didn't survive contact with the behaviour it produced: the app went on looking
+signed in — sidebar, name, school code all rendering — while every request
+failed 401 with an empty body, so the UI reported a generic "could not load"
+and appeared to blame the server. The user got the hourly interruption either
+way; they just weren't told about it, and lost their place as well. It also
+ignored `refreshToken`
 entirely, since storing a credential it can never redeem only widens the attack
 surface.
 
-Expiry handling lands in one place (`src/lib/auth-context.tsx`) the moment
-`/auth/refresh` exists — renew shortly before `exp`, and fall back to signing
-out only when the renewal itself fails.
+When `/auth/refresh` ships, the change is small and lands in one place: renew
+in `apiRequest` when `isTokenExpired` fires instead of ending the session, and
+keep the sign-out purely as the fallback for a failed renewal. The detection is
+already there.
 
-*Confirmed 2026-08-20.*
+*Confirmed 2026-08-20; re-confirmed and the frontend position revised
+2026-09-28.*
 
 ---
 
