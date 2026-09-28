@@ -10,8 +10,13 @@ export type UseClassLevels = {
 };
 
 // Loads the school's class levels once, with each one's UUID recovered from the
-// lookup. Shared by the classes hub and the enrolment form, which needs the
-// numeric ids the enrolment body takes.
+// lookup.
+//
+// Only the classes hub needs this: it renders every class with its streams
+// (which the list carries and the lookup doesn't) *and* links to each one's
+// roster (which needs the UUID the list doesn't carry). Anything that just
+// needs to name a class — the enrolment form — should use `ClassLevelLookup`
+// instead and skip the fan-out entirely.
 export function useClassLevels(reloadKey: number = 0): UseClassLevels {
   const [classLevels, setClassLevels] = useState<ClassLevelRecord[]>([]);
   const [error, setError] = useState<string | null>(null);

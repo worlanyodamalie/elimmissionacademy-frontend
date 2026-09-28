@@ -75,6 +75,10 @@ export async function listClassLevels(
   );
 }
 
+// The picker path: one request, and the response carries both the numeric id an
+// enrolment body takes and the UUID the class-level pages are keyed by. Prefer
+// this over `loadClassLevels` wherever a form just needs to name a class.
+//
 // `query` is a required request param, so there is no "list everything" call
 // here — a blank search is answered locally rather than with a guaranteed 400.
 export async function lookupClassLevels(

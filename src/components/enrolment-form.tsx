@@ -12,6 +12,7 @@ import { Alert, Badge, Button, Card, Field, Select, Textarea } from "./ui";
 import { FormError, focusFirstError, useFormError } from "./form-error";
 import { DateInput } from "./date-input";
 import { StudentLookup } from "./student-lookup";
+import { ClassLevelLookup } from "./class-level-lookup";
 import { useToast } from "./toast";
 import { academicYearOptions } from "@/lib/academics";
 import {
@@ -21,10 +22,10 @@ import {
   getStudentEnrolmentOrNull,
 } from "@/lib/classes";
 import { useAcademicTerms } from "@/lib/use-academic-terms";
-import { useClassLevels } from "@/lib/use-class-levels";
 import { formatDate, formatEnumLabel, todayIso } from "@/lib/utils";
 import type {
   ApiError,
+  ClassLevelLookUpResponse,
   EnrolmentType,
   StudentEnrolmentRequest,
   StudentEnrolmentResponse,
@@ -49,16 +50,15 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
   const { toast } = useToast();
   const { terms, years, loading: academicsLoading, error: academicsError } =
     useAcademicTerms();
-  const {
-    classLevels,
-    loading: classesLoading,
-    error: classesError,
-  } = useClassLevels();
 
   const yearOptions = academicYearOptions({ years, terms });
 
   const [student, setStudent] = useState<StudentSearchResult | null>(null);
-  const [classLevelId, setClassLevelId] = useState("");
+  // The lookup row, not just an id: it carries the numeric `classLevelId` the
+  // request body takes, so nothing has to be resolved again at submit time.
+  const [classLevel, setClassLevel] = useState<ClassLevelLookUpResponse | null>(
+    null,
+  );
   const [academicYearId, setAcademicYearId] = useState("");
   const [enrolmentType, setEnrolmentType] =
     useState<EnrolmentType>("NEW_ADMISSION");
@@ -126,7 +126,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
 
     const errs: Errors = {};
     if (!student) errs.student = "Search for and select a student.";
-    if (!classLevelId) errs.classLevelId = "Choose a class.";
+    if (!classLevel) errs.classLevelId = "Search for and select a class.";
     if (!selectedYearId) errs.academicYearId = "Choose an academic year.";
     if (!enrolmentDate) errs.enrolmentDate = "Enrolment date is required.";
     setErrors(errs);
@@ -144,7 +144,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
     try {
       const body: StudentEnrolmentRequest = {
         studentId: student!.profileId,
-        classLevelId: Number(classLevelId),
+        classLevelId: classLevel!.classLevelId,
         academicYearId: Number(selectedYearId),
         enrolmentType,
         enrolmentDate,
@@ -191,9 +191,8 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
     );
   }
 
-  const loadError = academicsError ?? classesError;
+  const loadError = academicsError;
   const noYears = !academicsLoading && yearOptions.length === 0;
-  const noClasses = !classesLoading && classLevels.length === 0;
 
   return (
     <Card>
@@ -209,12 +208,6 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
             year, and its terms supply the id this form needs.
           </Alert>
         ) : null}
-        {noClasses ? (
-          <Alert variant="warning" title="No classes yet">
-            Add the school&apos;s class levels before enrolling anyone.
-          </Alert>
-        ) : null}
-
         <StudentLookup
           inputId="enrol-student"
           selected={student}
@@ -244,32 +237,14 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
         ) : null}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field
-            label="Class"
-            htmlFor="enrol-class"
-            required
+          <ClassLevelLookup
+            inputId="enrol-class"
+            selected={classLevel}
+            onSelect={setClassLevel}
             error={errors.classLevelId}
+            required
             hint="The stream is chosen for you — the first one with room."
-          >
-            <Select
-              id="enrol-class"
-              value={classLevelId}
-              onChange={(e) => setClassLevelId(e.target.value)}
-              disabled={classesLoading || noClasses}
-              invalid={!!errors.classLevelId}
-              required
-            >
-              <option value="">
-                {classesLoading ? "Loading classes…" : "Select a class"}
-              </option>
-              {classLevels.map((level) => (
-                <option key={level.classLevelId} value={level.classLevelId}>
-                  {level.className}
-                  {level.code ? ` (${level.code})` : ""}
-                </option>
-              ))}
-            </Select>
-          </Field>
+          />
 
           <Field
             label="Academic year"
@@ -352,7 +327,7 @@ export function EnrolmentForm({ initialStudentQuery = "", onEnrolled }: Props) {
         <FormError error={error} nonce={errorNonce} title="Could not enrol" />
 
         <div className="flex justify-end">
-          <Button type="submit" loading={submitting} disabled={noYears || noClasses}>
+          <Button type="submit" loading={submitting} disabled={noYears}>
             {submitting ? "Enrolling…" : "Enrol student"}
           </Button>
         </div>
