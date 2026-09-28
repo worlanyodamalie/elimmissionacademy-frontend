@@ -6,7 +6,11 @@ import { Suspense, useEffect, useState } from "react";
 import { Alert, Button, Card, Field, Input, PasswordInput } from "@/components/ui";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/toast";
-import { readLastSchoolCode } from "@/lib/api";
+import {
+  clearSessionExpired,
+  peekSessionExpired,
+  readLastSchoolCode,
+} from "@/lib/api";
 import {
   hasErrors,
   schoolCode as schoolCodeError,
@@ -39,6 +43,14 @@ function LoginForm() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Latched on mount so the notice survives the flag being cleared. Reading
+  // sessionStorage during render is safe here: `useSearchParams` above puts
+  // this whole form behind the page's Suspense boundary, so the server renders
+  // the fallback and there is no prerendered HTML to mismatch against.
+  const [sessionExpired] = useState(peekSessionExpired);
+  useEffect(() => {
+    clearSessionExpired();
+  }, []);
   const [fieldErrors, setFieldErrors] = useState<{
     schoolCode?: string;
     identifier?: string;
@@ -105,6 +117,18 @@ function LoginForm() {
           Use your school code and credentials to access the dashboard.
         </p>
       </div>
+
+      {/* Shown when a request was abandoned because the access token lapsed.
+          Suppressed once the user has actually tried to sign in, so a failure
+          message never sits underneath a stale explanation. */}
+      {sessionExpired && !error ? (
+        <div className="mb-4">
+          <Alert variant="warning" title="Your session expired">
+            Sessions last an hour. Sign in again and we&apos;ll take you back to
+            where you were.
+          </Alert>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mb-4">

@@ -99,6 +99,65 @@ export function decodeJwt(token: string): Record<string, unknown> | null {
   }
 }
 
+// Set when a request is abandoned because the stored token has lapsed, and
+// read once by the login page so it can say why the user is back there. Kept
+// in sessionStorage rather than a module variable so it survives a reload.
+const SESSION_EXPIRED_KEY = "ema.auth.expired";
+
+function markSessionExpired() {
+  try {
+    window.sessionStorage.setItem(SESSION_EXPIRED_KEY, "1");
+  } catch {
+    // Private mode or blocked storage: the redirect still happens, the user
+    // just doesn't get the explanation.
+  }
+}
+
+// Split from the clear below so a component can read this while rendering —
+// a pure read — and drop the flag from an effect, where writing to an external
+// store belongs.
+export function peekSessionExpired(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return !!window.sessionStorage.getItem(SESSION_EXPIRED_KEY);
+  } catch {
+    return false;
+  }
+}
+
+// Called once the notice has been shown, so a later visit to /login is silent.
+export function clearSessionExpired() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(SESSION_EXPIRED_KEY);
+  } catch {
+    // Nothing to do; the flag is advisory.
+  }
+}
+
+// The backend issues a one-hour access token, and a refresh token it has no
+// endpoint to redeem (docs/API-GAPS.md §O12). Until `/auth/refresh` exists the
+// best we can do is notice the lapse and say so, rather than firing requests
+// that come back 401 with an empty body and look like a server fault.
+//
+// A token with no readable `exp` is treated as usable: a malformed one is the
+// server's business to reject, and guessing here would sign people out wrongly.
+export function isTokenExpired(token: string, skewSeconds = 30): boolean {
+  const exp = decodeJwt(token)?.exp;
+  if (typeof exp !== "number") return false;
+  return Date.now() >= (exp - skewSeconds) * 1000;
+}
+
+// Ends the session so the app stops pretending to be signed in. The dashboard
+// shell watches the session and sends the user to /login?from=… on its own, so
+// nothing here needs to know about routing.
+function endExpiredSession() {
+  markSessionExpired();
+  clearSession();
+}
+
+const EXPIRED_MESSAGE = "Your session has expired. Please sign in again.";
+
 export type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   body?: unknown;
@@ -117,6 +176,17 @@ export async function apiRequest<T = unknown>(
   const session = options.auth !== false ? readSession() : null;
   const token = options.token ?? session?.token;
   const schoolCode = options.schoolCode ?? session?.schoolCode;
+
+  // Only a token we took from the stored session can be "expired" in the sense
+  // that signing in again fixes it. One passed explicitly by the caller (the
+  // password-setup links) belongs to that flow, and a failed sign-in must not
+  // be mistaken for a lapsed session.
+  const usingStoredToken = options.token === undefined && !!session?.token;
+
+  if (usingStoredToken && isTokenExpired(session.token)) {
+    endExpiredSession();
+    throw { message: EXPIRED_MESSAGE, status: 401 } as ApiError;
+  }
 
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   const fullPath = `${API_BASE_URL}${cleanPath}`;
@@ -154,6 +224,19 @@ export async function apiRequest<T = unknown>(
   const data = text ? safeJson(text) ?? text : null;
 
   if (!res.ok) {
+    // An expired token answers 401 with an *empty body* and the reason only in
+    // `www-authenticate` (verified 2026-09-28):
+    //   Bearer error="invalid_token", error_description="Jwt expired at …"
+    // Without this the caller would surface "Request failed (401)", which
+    // reads like a backend fault rather than "sign in again".
+    if (res.status === 401 && usingStoredToken) {
+      const challenge = res.headers.get("www-authenticate") ?? "";
+      if (challenge.includes("invalid_token") || isTokenExpired(session.token)) {
+        endExpiredSession();
+        throw { message: EXPIRED_MESSAGE, status: 401, details: data } as ApiError;
+      }
+    }
+
     const message = extractErrorMessage(data) ?? `Request failed (${res.status})`;
     const err: ApiError = {
       message,

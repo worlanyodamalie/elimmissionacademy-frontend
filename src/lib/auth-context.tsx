@@ -76,11 +76,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loading = snapshot === undefined;
   const session = snapshot ?? null;
 
-  // Note: nothing signs the user out when the access token expires. That is
-  // deliberate — the backend issues a 1-hour token and a refresh token it has
-  // no endpoint to redeem (docs/API-GAPS.md §O12), so expiry handling would be
-  // an hourly forced logout with no way to renew. Revisit when /auth/refresh
-  // ships.
+  // Expiry is handled in `apiRequest`, not here: it ends the session the first
+  // time a call is made with a lapsed token, and the redirect below does the
+  // rest. This provider only reflects whatever is in storage.
+  //
+  // It used to do nothing at all, on the reasoning that signing people out
+  // hourly with no way to renew was worse than leaving them be. It wasn't —
+  // the app went on looking signed in while every request failed 401 with an
+  // empty body, so the UI blamed the server. An hourly sign-out that says why
+  // and returns you to the page you were on is the honest version of the same
+  // interruption.
+  //
+  // The real fix is backend-side and half-built: login already returns a
+  // `refreshToken` (492 chars, alongside `expiresIn: 3600000`), there is just
+  // no endpoint to redeem it — docs/API-GAPS.md §O12.
 
   const login = useCallback<AuthContextValue["login"]>(
     async ({ login: identifier, password, schoolCode }) => {
