@@ -15,6 +15,7 @@ import { DateInput } from "@/components/date-input";
 import { ChevronRightIcon } from "@/components/icons";
 import { useToast } from "@/components/toast";
 import {
+  byTermNumberAsc,
   createAcademicYear,
   termLabel,
   updateAcademicTerm,
@@ -242,10 +243,15 @@ function YearCard({
   // The merged records, not `year.academicTerms`, so the rows can show the
   // current-term badge and carry the `publicId` that the update call needs.
   const createdBy = formatFullName(year.createdByName);
-  const yearTerms = terms.filter(
-    (t) =>
-      t.academicYearName.trim().toLowerCase() === year.name.trim().toLowerCase(),
-  );
+  // Re-sorted: the shared records are most-recent-first for the pickers, but a
+  // year's own terms should read first to third.
+  const yearTerms = terms
+    .filter(
+      (t) =>
+        t.academicYearName.trim().toLowerCase() ===
+        year.name.trim().toLowerCase(),
+    )
+    .sort(byTermNumberAsc);
 
   return (
     <Card>

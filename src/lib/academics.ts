@@ -216,6 +216,19 @@ export type AcademicYearOption = {
   isCurrent: boolean;
 };
 
+// Reading order within one year: first term to third.
+//
+// The default sort on `terms` is most-recent-first, which is what a picker
+// wants but not what a list of one year's terms should look like. Sorting on
+// the term number rather than the dates also survives the null dates a freshly
+// created year comes with (docs/API-GAPS.md §8d).
+export function byTermNumberAsc(
+  a: AcademicTermRecord,
+  b: AcademicTermRecord,
+): number {
+  return TERM_ORDER.indexOf(a.termNumber) - TERM_ORDER.indexOf(b.termNumber);
+}
+
 export type AcademicsSnapshot = {
   years: AcademicYearResponse[];
   terms: AcademicTermRecord[];

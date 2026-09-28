@@ -626,6 +626,13 @@ Consequences for any client:
   spec types as plain `string`. `src/lib/types.ts` marks them
   `string | null` and `loadAcademics` normalises to `""`.
 
+Related: **`academicTerms` comes back in a different order each call.** The
+same year returned `FIRST, SECOND, THIRD` at 13:29 and `SECOND, FIRST, THIRD`
+at 15:04 on 2026-09-28 — the field is declared `uniqueItems: true`, so it is a
+Set server-side and has no order to rely on. `loadAcademics` is unaffected
+because it keys terms by year name plus term number rather than by position,
+but anything reading `academicTerms[0]` would be wrong intermittently.
+
 An admin must open each term and set its dates via the `PUT` before the
 calendar is usable. That is three edits per year, every year, to supply dates
 the backend could divide itself.
