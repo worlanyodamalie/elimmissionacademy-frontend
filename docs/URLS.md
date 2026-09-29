@@ -33,6 +33,7 @@ These are the Next.js routes a user can visit in the browser.
 | `/forgot-password`                 | Request a password reset email.                               | none                |
 | `/reset-password?token=...&schoolCode=...` | Set a new password using the reset token from email.   | token in URL        |
 | `/setup-password?token=...&schoolCode=...` | First-time password setup for invited users.           | token in URL        |
+| `/api/v1/auth/users/setup-password?...` | Path the onboarding email links to; 307s to `/setup-password` with the query intact (`next.config.ts`). | token in URL |
 | `/dashboard`                       | Authenticated overview, quick actions, getting-started.       | authenticated       |
 | `/dashboard/students`              | Students hub + resend onboarding tool.                        | authenticated admin |
 | `/dashboard/students/new`          | Enroll a student with one or more parents/guardians.          | authenticated admin |

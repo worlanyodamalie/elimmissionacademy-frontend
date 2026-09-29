@@ -154,6 +154,9 @@ toast: "Password reset" → /login?school=ELI_xxxxx
 Email invite from admin
         │
         ▼
+/api/v1/auth/users/setup-password?token=...  ← path in the email
+        │  307 (next.config.ts redirects)
+        ▼
 /setup-password?token=<uuid>&schoolCode=ELI_xxxxx
   ├ new password + confirm
   ├ POST /auth/users/setup-password (USERS.setupPassword)
