@@ -61,6 +61,11 @@ const SECURITY_HEADERS = [
 // any future third-party asset on these pages.
 const NO_REFERRER = [{ key: "Referrer-Policy", value: "no-referrer" }];
 
+// The backend's onboarding email links to the frontend at the setup API's own
+// path rather than the page. Send it to the page; the query string (token,
+// schoolCode) is carried over by the redirect.
+const EMAILED_SETUP_PASSWORD_PATH = "/api/v1/auth/users/setup-password";
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -68,6 +73,15 @@ const nextConfig: NextConfig = {
       { source: "/admin-setup", headers: NO_REFERRER },
       { source: "/setup-password", headers: NO_REFERRER },
       { source: "/reset-password", headers: NO_REFERRER },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: EMAILED_SETUP_PASSWORD_PATH,
+        destination: "/setup-password",
+        permanent: false,
+      },
     ];
   },
 };
