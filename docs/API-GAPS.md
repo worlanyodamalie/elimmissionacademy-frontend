@@ -190,13 +190,23 @@ Three problems in one endpoint:
    renders as "no results".
 3. **Two or more matches 500.** Any common surname breaks the page.
 
+**Re-tested 2026-10-06 against `WOR_9fe69`:** problems 2 and 3 are gone in
+their old form — any number of matches now comes back as **200 with a bare
+array**, and `page`/`size` are ignored (every match, every time). Problem 1
+remains: no match is still 404 `USER_NOT_FOUND`. `/dashboard/directory` now
+accepts the array, pages it client-side, and treats the 404 as "no results".
+
 Note also that the row's identity field is `id` — not `userId`, not the profile
 UUID — so a result still can't be linked to that person's profile (§O5).
 
 `/auth/users/parents/lookup` behaves the same way at the boundaries (404 for a
-term matching a non-parent). The 2026-08-12 report of **500 on every matching
-term** could not be re-tested: `WOR_b8df0` has no parent records, so there is
-nothing for it to match.
+term matching a non-parent). Re-tested 2026-10-06 against `WOR_9fe69`, which
+has a parent record: matching terms (full or partial name, email) now return
+**200 with a bare array** of `{id, firstName, lastName, email, mobileNumber}` —
+no `Page` wrapper, despite the spec — and `page`/`size` are accepted. The
+earlier 500 no longer reproduces. The parent picker had been reading `.content`
+and so showed "No parents matched" for every hit; it now accepts either shape
+and treats the 404 as an empty result.
 
 **Ask:** always return a `Page` — empty `content` for no matches, one-element
 `content` for one — and include the profile UUID in each row.
