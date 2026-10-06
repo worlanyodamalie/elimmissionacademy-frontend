@@ -92,9 +92,13 @@ export function StudentLookup({
         if (!controller.signal.aborted) {
           setResults([]);
           setSearched(true);
-          setSearchError(
-            (err as ApiError).message ?? "Could not search students.",
-          );
+          // A search with no matches comes back as 404 STUDENT_NOT_FOUND
+          // rather than an empty list; that is "no results", not a failure.
+          if ((err as ApiError).status !== 404) {
+            setSearchError(
+              (err as ApiError).message ?? "Could not search students.",
+            );
+          }
         }
       } finally {
         if (!controller.signal.aborted) setSearching(false);

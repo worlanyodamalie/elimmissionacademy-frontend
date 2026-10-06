@@ -55,14 +55,27 @@ export default function DirectoryPage() {
 
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      apiRequest<PageResponse<UserLookupResult>>(USERS.lookup, {
-        query: { query: q, page: String(page), size: String(PAGE_SIZE) },
-        signal: controller.signal,
-      })
+      apiRequest<UserLookupResult[] | PageResponse<UserLookupResult>>(
+        USERS.lookup,
+        {
+          query: { query: q, page: String(page), size: String(PAGE_SIZE) },
+          signal: controller.signal,
+        },
+      )
         .then((response) => {
-          setResults(response?.content ?? []);
-          setTotalPages(response?.totalPages ?? 0);
-          setTotalElements(response?.totalElements ?? 0);
+          if (Array.isArray(response)) {
+            // The endpoint answers with every match as a bare array and
+            // ignores `page`/`size`, so page through it here.
+            setResults(
+              response.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE),
+            );
+            setTotalPages(Math.ceil(response.length / PAGE_SIZE));
+            setTotalElements(response.length);
+          } else {
+            setResults(response?.content ?? []);
+            setTotalPages(response?.totalPages ?? 0);
+            setTotalElements(response?.totalElements ?? 0);
+          }
           setError(null);
         })
         .catch((err: ApiError) => {
@@ -70,7 +83,13 @@ export default function DirectoryPage() {
           setResults([]);
           setTotalElements(0);
           setTotalPages(0);
-          setError(err.message ?? "Could not search users.");
+          // A search with no matches comes back as 404 USER_NOT_FOUND rather
+          // than an empty list; that is "no results", not a failure.
+          setError(
+            err.status === 404
+              ? null
+              : (err.message ?? "Could not search users."),
+          );
         })
         .finally(() => {
           if (!controller.signal.aborted) setLoadedKey(fetchKey);

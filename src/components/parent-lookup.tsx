@@ -55,14 +55,19 @@ export function ParentLookup({
     const timer = setTimeout(async () => {
       setSearching(true);
       try {
-        const page = await apiRequest<
-          PageResponse<ParentSummary & { id?: number }>
-        >(USERS.parentsLookup, {
-          query: { query: q, page: "0", size: String(LOOKUP_PAGE_SIZE) },
-          signal: controller.signal,
-        });
+        type Row = ParentSummary & { id?: number };
+        const data = await apiRequest<Row[] | PageResponse<Row>>(
+          USERS.parentsLookup,
+          {
+            query: { query: q, page: "0", size: String(LOOKUP_PAGE_SIZE) },
+            signal: controller.signal,
+          },
+        );
+        // The endpoint answers with a bare array despite the spec's `Page`;
+        // tolerate a page wrapper in case it starts paginating.
+        const found = Array.isArray(data) ? data : (data?.content ?? []);
         setResults(
-          (page?.content ?? []).map((r) => ({
+          found.slice(0, LOOKUP_PAGE_SIZE).map((r) => ({
             ...r,
             // Tolerate either `parentId` or a generic `id` in lookup rows.
             parentId: r.parentId ?? r.id ?? 0,
@@ -73,9 +78,13 @@ export function ParentLookup({
         if (!controller.signal.aborted) {
           setResults([]);
           setSearched(true);
-          setSearchError(
-            (err as ApiError).message ?? "Could not search parents.",
-          );
+          // A search with no matches comes back as 404 PARENT_NOT_FOUND
+          // rather than an empty list; that is "no results", not a failure.
+          if ((err as ApiError).status !== 404) {
+            setSearchError(
+              (err as ApiError).message ?? "Could not search parents.",
+            );
+          }
         }
       } finally {
         if (!controller.signal.aborted) setSearching(false);
