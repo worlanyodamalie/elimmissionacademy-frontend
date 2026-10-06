@@ -46,9 +46,9 @@ function pageQuery({ page, size, sort }: PageParams = {}): Query {
   };
 }
 
-// Some list endpoints return a bare array instead of a page wrapper; normalize
-// so callers only handle one shape.
-function toPage<T>(data: PageResponse<T> | T[]): PageResponse<T> {
+// Some list endpoints return a bare array instead of a page wrapper, or an
+// empty body (`null`); normalize so callers only handle one shape.
+function toPage<T>(data: PageResponse<T> | T[] | null): PageResponse<T> {
   if (Array.isArray(data)) {
     return {
       content: data,
@@ -57,6 +57,9 @@ function toPage<T>(data: PageResponse<T> | T[]): PageResponse<T> {
       number: 0,
       size: data.length,
     };
+  }
+  if (!data) {
+    return { content: [], totalElements: 0, totalPages: 1, number: 0, size: 0 };
   }
   return { ...data, content: data.content ?? [] };
 }
@@ -69,7 +72,7 @@ export async function listServiceCosts(
 ): Promise<PageResponse<ServiceCostResponse>> {
   return toPage(
     await apiRequest<
-      PageResponse<ServiceCostResponse> | ServiceCostResponse[]
+      PageResponse<ServiceCostResponse> | ServiceCostResponse[] | null
     >(BILLING.serviceCosts, { query: pageQuery(params), signal }),
   );
 }
@@ -103,7 +106,7 @@ export async function listStudentBills(
 ): Promise<PageResponse<StudentBillResponse>> {
   return toPage(
     await apiRequest<
-      PageResponse<StudentBillResponse> | StudentBillResponse[]
+      PageResponse<StudentBillResponse> | StudentBillResponse[] | null
     >(BILLING.studentBills, { query: pageQuery(params), signal }),
   );
 }
@@ -157,7 +160,7 @@ export async function listBillLineItems(
 ): Promise<PageResponse<BillLineItemResponse>> {
   return toPage(
     await apiRequest<
-      PageResponse<BillLineItemResponse> | BillLineItemResponse[]
+      PageResponse<BillLineItemResponse> | BillLineItemResponse[] | null
     >(BILLING.billLineItems, {
       query: { ...(filter as Query | undefined), ...pageQuery(params) },
       signal,
