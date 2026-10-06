@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button, Field, Input } from "./ui";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, isNoMatchError } from "@/lib/api";
 import { USERS } from "@/lib/endpoints";
 import type { ApiError, PageResponse, StudentSearchResult } from "@/lib/types";
 
@@ -92,9 +92,9 @@ export function StudentLookup({
         if (!controller.signal.aborted) {
           setResults([]);
           setSearched(true);
-          // A search with no matches comes back as 404 STUDENT_NOT_FOUND
+          // A search with no matches comes back as a 404 *_NOT_FOUND problem
           // rather than an empty list; that is "no results", not a failure.
-          if ((err as ApiError).status !== 404) {
+          if (!isNoMatchError(err)) {
             setSearchError(
               (err as ApiError).message ?? "Could not search students.",
             );

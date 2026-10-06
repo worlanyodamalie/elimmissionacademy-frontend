@@ -249,6 +249,20 @@ export async function apiRequest<T = unknown>(
   return data as T;
 }
 
+// The lookups answer "nothing matched" with a 404 problem detail carrying a
+// `*_NOT_FOUND` errorCode (e.g. USER_NOT_FOUND) instead of an empty list. Only
+// that counts as no results: a 404 without the code — a wrong path or base URL
+// — is a real failure and must still surface.
+export function isNoMatchError(err: unknown): boolean {
+  const e = err as ApiError | undefined;
+  if (e?.status !== 404) return false;
+  const details = e.details as
+    | { properties?: { errorCode?: unknown }; errorCode?: unknown }
+    | undefined;
+  const code = details?.properties?.errorCode ?? details?.errorCode;
+  return typeof code === "string" && code.endsWith("_NOT_FOUND");
+}
+
 function extractErrorMessage(data: unknown): string | undefined {
   if (!data) return undefined;
   if (typeof data === "string") return data;

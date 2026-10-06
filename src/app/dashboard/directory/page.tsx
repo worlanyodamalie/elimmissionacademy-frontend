@@ -6,7 +6,7 @@ import { Badge, Button, Card, Field, Input, PageHeader } from "@/components/ui";
 import { EmptyState, Pagination } from "@/components/billing-ui";
 import { ResendOnboardingCard } from "@/components/resend-onboarding-card";
 import { RoleSwapIcon, SearchIcon } from "@/components/icons";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, isNoMatchError } from "@/lib/api";
 import { ROUTES, USERS } from "@/lib/endpoints";
 import { formatRoleLabel, getInitials } from "@/lib/utils";
 import type { ApiError, PageResponse, UserLookupResult } from "@/lib/types";
@@ -86,7 +86,7 @@ export default function DirectoryPage() {
           // A search with no matches comes back as 404 USER_NOT_FOUND rather
           // than an empty list; that is "no results", not a failure.
           setError(
-            err.status === 404
+            isNoMatchError(err)
               ? null
               : (err.message ?? "Could not search users."),
           );

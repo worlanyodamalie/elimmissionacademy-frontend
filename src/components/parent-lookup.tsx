@@ -6,7 +6,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Field, Input } from "./ui";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, isNoMatchError } from "@/lib/api";
 import { USERS } from "@/lib/endpoints";
 import type { ApiError, PageResponse, ParentSummary } from "@/lib/types";
 
@@ -67,20 +67,24 @@ export function ParentLookup({
         // tolerate a page wrapper in case it starts paginating.
         const found = Array.isArray(data) ? data : (data?.content ?? []);
         setResults(
-          found.slice(0, LOOKUP_PAGE_SIZE).map((r) => ({
-            ...r,
-            // Tolerate either `parentId` or a generic `id` in lookup rows.
-            parentId: r.parentId ?? r.id ?? 0,
-          })),
+          found
+            .flatMap((r) => {
+              // Tolerate either `parentId` or a generic `id` in lookup rows.
+              const parentId = r.parentId ?? r.id;
+              // A row without an id can't be linked or paid against; offering
+              // it would send parentId 0 to the backend.
+              return parentId ? [{ ...r, parentId }] : [];
+            })
+            .slice(0, LOOKUP_PAGE_SIZE),
         );
         setSearched(true);
       } catch (err) {
         if (!controller.signal.aborted) {
           setResults([]);
           setSearched(true);
-          // A search with no matches comes back as 404 PARENT_NOT_FOUND
+          // A search with no matches comes back as a 404 *_NOT_FOUND problem
           // rather than an empty list; that is "no results", not a failure.
-          if ((err as ApiError).status !== 404) {
+          if (!isNoMatchError(err)) {
             setSearchError(
               (err as ApiError).message ?? "Could not search parents.",
             );
