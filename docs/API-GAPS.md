@@ -208,6 +208,22 @@ earlier 500 no longer reproduces. The parent picker had been reading `.content`
 and so showed "No parents matched" for every hit; it now accepts either shape
 and treats the 404 as an empty result.
 
+**No-match codes, run 2026-10-06 against `WOR_9fe69`.** All three lookups
+answer a term that matches nothing with an RFC 7807 404 whose
+`properties.errorCode` names the miss; an unknown route is a plain Spring 404
+with no code:
+
+```
+GET /auth/users/lookup?query=zzqxnomatch          -> 404 USER_NOT_FOUND
+GET /auth/users/parents/lookup?query=zzqxnomatch  -> 404 PARENT_NOT_FOUND
+GET /auth/users/students/lookup?query=zzqxnomatch -> 404 STUDENT_NOT_FOUND
+GET /auth/users/no-such-route                     -> 404 {"error":"Not Found","path":...}
+```
+
+`isNoMatchError` in `src/lib/api.ts` keys on that code, so only a genuine
+"nothing matched" renders as no results; any other 404 still surfaces as an
+error. None of these 404s appear in `/v3/api-docs`.
+
 **Ask:** always return a `Page` — empty `content` for no matches, one-element
 `content` for one — and include the profile UUID in each row.
 
