@@ -24,6 +24,7 @@ import {
 } from "@/components/billing-ui";
 import { PaymentForm } from "@/components/payment-form";
 import { useToast } from "@/components/toast";
+import { UserLookup, type PickedUser } from "@/components/user-lookup";
 import { useAuth } from "@/lib/auth-context";
 import { useSchoolId } from "@/lib/use-school-id";
 import {
@@ -96,13 +97,15 @@ function OpenSessionCard({
   const { toast } = useToast();
   const { session } = useAuth();
   const { schoolId, resolving: resolvingSchool } = useSchoolId();
-  const userId = session?.user?.userId;
+  // The token carries no numeric user id, but its email finds the signed-in
+  // user in the lookup, so the cashier starts as them.
+  const myEmail = session?.user?.email;
+  const [cashier, setCashier] = useState<PickedUser | null>(null);
   // Only asked for when neither the token nor any list could supply it.
   const askForSchoolId = !resolvingSchool && schoolId === undefined;
 
   const [form, setForm] = useState({
     schoolId: "",
-    cashierId: userId ? String(userId) : "",
     openingFloatingAmount: "0",
     remarks: "",
   });
@@ -125,9 +128,7 @@ function OpenSessionCard({
         askForSchoolId && !/^\d+$/.test(form.schoolId.trim())
           ? "Enter the school's numeric id."
           : undefined,
-      cashierId: /^\d+$/.test(form.cashierId.trim())
-        ? undefined
-        : "Enter the cashier's numeric user id.",
+      cashierId: cashier ? undefined : "Find and pick the cashier.",
       openingFloatingAmount:
         form.openingFloatingAmount.trim() && float >= 0
           ? undefined
@@ -140,7 +141,7 @@ function OpenSessionCard({
     try {
       const opened = await openCashSession({
         schoolId: schoolId ?? Number(form.schoolId),
-        cashierId: Number(form.cashierId),
+        cashierId: cashier!.id,
         openingFloatingAmount: float,
         ...(form.remarks.trim() ? { remarks: form.remarks.trim() } : {}),
       });
@@ -178,18 +179,16 @@ function OpenSessionCard({
       ) : null}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <NumericIdField
-            label="Cashier user id"
-            id="os-cashier"
-            value={form.cashierId}
-            onChange={(v) => setForm({ ...form, cashierId: v })}
+          <UserLookup
+            label="Cashier"
+            inputId="os-cashier"
+            selected={cashier}
+            onSelect={setCashier}
             required
             error={errors.cashierId}
-            hint={
-              userId && form.cashierId === String(userId)
-                ? "Defaults to you — change it to open a till for someone else."
-                : undefined
-            }
+            initialQuery={myEmail ?? ""}
+            autoSelectSingleMatch
+            hint="Starts as you — search to open a till for someone else."
           />
           <Field
             label="Opening float"
@@ -682,9 +681,7 @@ function ApproveSessionForm({
 }) {
   const { toast } = useToast();
   const { session: auth } = useAuth();
-  const [approvedById, setApprovedById] = useState(
-    auth?.user?.userId ? String(auth.user.userId) : "",
-  );
+  const [approver, setApprover] = useState<PickedUser | null>(null);
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -693,8 +690,8 @@ function ApproveSessionForm({
     e.preventDefault();
     setError(null);
 
-    if (!/^\d+$/.test(approvedById.trim())) {
-      setFieldError("Enter the approver's numeric user id.");
+    if (!approver) {
+      setFieldError("Find and pick who is approving.");
       return;
     }
     setFieldError(undefined);
@@ -702,7 +699,7 @@ function ApproveSessionForm({
     setSubmitting(true);
     try {
       const updated = await approveCashSession(session.publicId, {
-        approvedById: Number(approvedById),
+        approvedById: approver.id,
       });
       toast({
         title: "Session approved",
@@ -747,14 +744,16 @@ function ApproveSessionForm({
         </Alert>
       ) : null}
 
-      <NumericIdField
-        label="Approver user id"
-        id={`ap-user-${session.publicId}`}
-        value={approvedById}
-        onChange={setApprovedById}
+      <UserLookup
+        label="Approver"
+        inputId={`ap-user-${session.publicId}`}
+        selected={approver}
+        onSelect={setApprover}
         required
         error={fieldError}
-        hint="Defaults to you. The backend rejects users without the approval role."
+        initialQuery={auth?.user?.email ?? ""}
+        autoSelectSingleMatch
+        hint="Starts as you. The backend rejects people without the approval role."
       />
 
       <div className="flex justify-end">

@@ -311,6 +311,9 @@ export type RoleChangePayload = {
 // The API types the page content as a bare object, so every field is optional
 // and the UI renders defensively.
 export type UserLookupResult = {
+  // The row's identity field, despite the spec (API-GAPS §O9) — and the
+  // numeric user id the cash-session bodies take.
+  id?: number;
   userId?: number;
   publicId?: string;
   firstName?: string;
