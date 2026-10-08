@@ -359,7 +359,7 @@ has been created yet, that is a closed loop.
 | `studentId` | `POST /payments/student-bills`, `POST /payments` | `StudentBillResponse`, `PaymentResponse` | **Yes** — `GET /auth/users/students/lookup` returns `profileId` (numeric) and `profilePublicId` (UUID) per match |
 | `academicTermId` | `POST /payments/student-bills` | `AcademicYearResponse.academicTerms[]`, `StudentBillResponse` | **Yes** — the years list carries it |
 | `academicYearId` | `POST /academics/terms` | `AcademicTermResponse`, `StudentBillResponse` | **No** — and this one is a hard blocker; see §8 |
-| `classLevelId` | `POST /payments/service-costs` | `ServiceCostResponse.classLevelId` | **No** — no class-level endpoint, so only levels already priced are discoverable |
+| `classLevelId` | `POST /payments/service-costs` | `ServiceCostResponse.classLevelId` | **Yes** — `GET /school/academics/class_levels/lookup?query=` (blank query) returns every class with its numeric `classLevelId`; the service-cost form picks from it via `ClassLevelSelect` |
 | `cashierId`, `approvedById` | `POST /cash-sessions`, `/approve` | `SessionResponse.cashierId` | **No** — no staff list (§O3) |
 
 The pattern is consistent: **the create endpoint needs an id that only a
@@ -419,13 +419,17 @@ Creating works; finding what was created often doesn't.
 | `GET /cash-sessions` (filter by status, cashier, date) | Show which tills are open. `GET /cash-sessions/{cashSessionId}` exists, so a session can be read *if* you already hold its UUID — which is exactly what nothing hands you. The page remembers UUIDs in `localStorage` (`src/lib/cash-session-store.ts`), a per-device workaround that loses sessions opened elsewhere. |
 | `GET /payments` (filter by student, bill, session, date range) | No payment history, no daily collections report, no receipt reprint, no "payments in this session" list for close-of-day reconciliation. |
 | `GET /discounts` and `GET /discounts/rules`  | The discounts page can only list what the current visit created. |
-| `GET` class levels                           | `ServiceCostRequest.classLevelId` can't be a dropdown. |
+| ~~`GET` class levels~~                       | Resolved — see below. |
 
 *Resolved 2026-08-31: `GET /auth/users/students/lookup?query=` searches the
 school's active students and answers a bare array of
 `{ profileId, profilePublicId, studentNumber, fullName }` — both id flavours
 billing needs. Wired into every student field on the billing screens
 (`src/components/student-lookup.tsx`).*
+
+*Resolved 2026-10-08: `GET /school/academics/class_levels/lookup?query=` with a
+blank query returns every class with its numeric `classLevelId`, so
+`ServiceCostRequest.classLevelId` is now a dropdown (`ClassLevelSelect`).*
 
 *Confirmed 2026-08-20: the whole `/school/**` surface is 6 GETs — service
 costs (list + one), student bills (list + one), bill line items (list + one),
