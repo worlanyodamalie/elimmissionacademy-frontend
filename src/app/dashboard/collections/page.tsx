@@ -517,6 +517,9 @@ function CloseSessionForm({
 }) {
   const { toast } = useToast();
   const { session: auth } = useAuth();
+  // Who did the count. Optional in the API; starts as the signed-in user, found
+  // by their email since the token carries no numeric user id.
+  const [closer, setCloser] = useState<PickedUser | null>(null);
   const [counted, setCounted] = useState("");
   const [varianceReason, setVarianceReason] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -551,7 +554,7 @@ function CloseSessionForm({
     try {
       const updated = await closeCashSession(session.publicId, {
         actualCashCounted: countedNumber,
-        ...(auth?.user?.userId ? { closedById: auth.user.userId } : {}),
+        ...(closer ? { closedById: closer.id } : {}),
         ...(varianceReason.trim()
           ? { varianceReason: varianceReason.trim() }
           : {}),
@@ -636,6 +639,16 @@ function CloseSessionForm({
           </div>
         </div>
       </div>
+
+      <UserLookup
+        label="Closed by"
+        inputId={`cs-closer-${session.publicId}`}
+        selected={closer}
+        onSelect={setCloser}
+        initialQuery={auth?.user?.email ?? ""}
+        autoSelectSingleMatch
+        hint="Starts as you — whoever counted the drawer."
+      />
 
       {hasCount && variance !== 0 ? (
         <Field
