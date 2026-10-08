@@ -123,7 +123,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userId: claims.userId as number | undefined,
           email: (claims.sub as string | undefined) ?? response.user?.email,
           roles: (claims.roles as string[] | undefined) ?? response.user?.roles,
-          schoolId: claims.schoolId as number | undefined,
+          // The token names the school `tenantId` (seen equal to the
+          // numeric `schoolId` on WOR_9fe69, 2026-10-08); `useSchoolId` still
+          // falls back to reading it off a list if neither claim is there.
+          schoolId: (claims.schoolId ?? claims.tenantId) as number | undefined,
           schoolCode:
             (claims.schoolCode as string | undefined) ??
             response.user?.schoolCode,
