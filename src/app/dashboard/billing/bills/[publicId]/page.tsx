@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Badge,
@@ -27,6 +27,7 @@ import {
   addBillLineItemFromServiceCost,
   addManualBillLineItem,
   getStudentBill,
+  listBillLineItems,
   listServiceCosts,
 } from "@/lib/billing";
 import {
@@ -35,9 +36,11 @@ import {
   SERVICE_CATEGORIES,
 } from "@/lib/billing-options";
 import { ROUTES } from "@/lib/endpoints";
+import { serviceCostIdsFromLineItems } from "@/lib/service-cost-ids";
 import { cn, formatDate, formatEnumLabel, formatMoney } from "@/lib/utils";
 import type {
   ApiError,
+  BillLineItemResponse,
   BillingCycle,
   Currency,
   ServiceCategory,
@@ -345,7 +348,11 @@ function FromPriceListForm({
   const [costs, setCosts] = useState<ServiceCostResponse[]>([]);
   const [costsError, setCostsError] = useState<string | null>(null);
   const [selected, setSelected] = useState("");
+  // Only read when the price's numeric id couldn't be recovered below.
   const [serviceCostId, setServiceCostId] = useState("");
+  // Earlier charges across the school — the only responses that carry a
+  // price's numeric `serviceCostId`.
+  const [chargedItems, setChargedItems] = useState<BillLineItemResponse[]>([]);
   const [quantity, setQuantity] = useState("1");
   const [dueDate, setDueDate] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
@@ -363,10 +370,20 @@ function FromPriceListForm({
         if (controller.signal.aborted) return;
         setCostsError(err.message ?? "Could not load the price list.");
       });
+    // Best effort: without it the id is simply asked for, as before.
+    listBillLineItems(undefined, { page: 0, size: 100 }, controller.signal)
+      .then((data) => setChargedItems(data.content))
+      .catch(() => {});
     return () => controller.abort();
   }, []);
 
+  const knownIds = useMemo(
+    () => serviceCostIdsFromLineItems(costs, chargedItems),
+    [costs, chargedItems],
+  );
   const chosen = costs.find((c) => c.publicId === selected);
+  const knownId = selected ? knownIds.get(selected) : undefined;
+  const postedId = knownId ?? Number(serviceCostId);
   const total = chosen ? chosen.amount * (Number(quantity) || 0) : null;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -375,9 +392,10 @@ function FromPriceListForm({
 
     const errs: Record<string, string | undefined> = {
       billId: billId ? undefined : "Enter the bill's numeric id first.",
-      serviceCostId: /^\d+$/.test(serviceCostId.trim())
-        ? undefined
-        : "Enter the service cost's numeric id.",
+      serviceCostId:
+        knownId !== undefined || /^\d+$/.test(serviceCostId.trim())
+          ? undefined
+          : "Enter the service cost's numeric id.",
       quantity:
         Number(quantity) >= 1 ? undefined : "Quantity must be at least 1.",
     };
@@ -387,7 +405,7 @@ function FromPriceListForm({
     setSubmitting(true);
     try {
       const item = await addBillLineItemFromServiceCost({
-        serviceCostId: Number(serviceCostId),
+        serviceCostId: postedId,
         studentBillId: billId,
         quantity: Number(quantity),
         ...(dueDate ? { dueDate } : {}),
@@ -430,7 +448,9 @@ function FromPriceListForm({
           hint={
             costs.length === 0
               ? "No active service costs — add one to the price list first."
-              : "Picking one shows its price; the numeric id below is what gets posted."
+              : knownId !== undefined
+                ? `Its id (${knownId}) comes from an earlier charge of this service.`
+                : "Picking one shows its price; the numeric id below is what gets posted."
           }
         >
           <Select
@@ -449,14 +469,21 @@ function FromPriceListForm({
           </Select>
         </Field>
 
-        <NumericIdField
-          label="Service cost id"
-          id="pl-service-id"
-          value={serviceCostId}
-          onChange={setServiceCostId}
-          required
-          error={errors.serviceCostId}
-        />
+        {knownId !== undefined ? null : (
+          <NumericIdField
+            label="Service cost id"
+            id="pl-service-id"
+            value={serviceCostId}
+            onChange={setServiceCostId}
+            required
+            error={errors.serviceCostId}
+            hint={
+              selected
+                ? "This service hasn't been charged to a bill yet, so its id can't be looked up."
+                : undefined
+            }
+          />
+        )}
 
         <Field
           label="Quantity"
