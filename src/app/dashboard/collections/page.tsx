@@ -25,6 +25,7 @@ import {
 import { PaymentForm } from "@/components/payment-form";
 import { useToast } from "@/components/toast";
 import { useAuth } from "@/lib/auth-context";
+import { useSchoolId } from "@/lib/use-school-id";
 import {
   approveCashSession,
   closeCashSession,
@@ -94,11 +95,13 @@ function OpenSessionCard({
 }) {
   const { toast } = useToast();
   const { session } = useAuth();
-  const schoolId = session?.user?.schoolId;
+  const { schoolId, resolving: resolvingSchool } = useSchoolId();
   const userId = session?.user?.userId;
+  // Only asked for when neither the token nor any list could supply it.
+  const askForSchoolId = !resolvingSchool && schoolId === undefined;
 
   const [form, setForm] = useState({
-    schoolId: schoolId ? String(schoolId) : "",
+    schoolId: "",
     cashierId: userId ? String(userId) : "",
     openingFloatingAmount: "0",
     remarks: "",
@@ -111,11 +114,17 @@ function OpenSessionCard({
     e.preventDefault();
     setError(null);
 
+    if (resolvingSchool) {
+      setError("Still looking up your school — try again in a moment.");
+      return;
+    }
+
     const float = Number(form.openingFloatingAmount);
     const errs: Record<string, string | undefined> = {
-      schoolId: /^\d+$/.test(form.schoolId.trim())
-        ? undefined
-        : "Enter the school's numeric id.",
+      schoolId:
+        askForSchoolId && !/^\d+$/.test(form.schoolId.trim())
+          ? "Enter the school's numeric id."
+          : undefined,
       cashierId: /^\d+$/.test(form.cashierId.trim())
         ? undefined
         : "Enter the cashier's numeric user id.",
@@ -130,7 +139,7 @@ function OpenSessionCard({
     setSubmitting(true);
     try {
       const opened = await openCashSession({
-        schoolId: Number(form.schoolId),
+        schoolId: schoolId ?? Number(form.schoolId),
         cashierId: Number(form.cashierId),
         openingFloatingAmount: float,
         ...(form.remarks.trim() ? { remarks: form.remarks.trim() } : {}),
@@ -200,7 +209,7 @@ function OpenSessionCard({
               invalid={!!errors.openingFloatingAmount}
             />
           </Field>
-          {schoolId ? null : (
+          {askForSchoolId ? (
             <NumericIdField
               label="School id"
               id="os-school"
@@ -208,9 +217,9 @@ function OpenSessionCard({
               onChange={(v) => setForm({ ...form, schoolId: v })}
               required
               error={errors.schoolId}
-              hint="Not present in your sign-in token, so it has to be typed."
+              hint="Your school has no classes, terms or bills yet to read it from, so it has to be typed."
             />
-          )}
+          ) : null}
         </div>
         <Field label="Remarks" htmlFor="os-remarks">
           <Textarea

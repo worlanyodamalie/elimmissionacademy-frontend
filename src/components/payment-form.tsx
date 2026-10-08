@@ -19,7 +19,7 @@ import { Money, NumericIdField, PaymentStatusBadge } from "./billing-ui";
 import { ParentLookup } from "./parent-lookup";
 import { StudentLookup } from "./student-lookup";
 import { useToast } from "./toast";
-import { useAuth } from "@/lib/auth-context";
+import { useSchoolId } from "@/lib/use-school-id";
 import { createPayment } from "@/lib/billing";
 import {
   CHANNELS_BY_METHOD,
@@ -61,11 +61,12 @@ export function PaymentForm({
   onRecorded,
 }: Props) {
   const { toast } = useToast();
-  const { session } = useAuth();
-  const sessionSchoolId = session?.user?.schoolId;
+  const { schoolId, resolving: resolvingSchool } = useSchoolId();
+  // Only asked for when neither the token nor any list could supply it.
+  const askForSchoolId = !resolvingSchool && schoolId === undefined;
 
   const [form, setForm] = useState({
-    schoolId: sessionSchoolId ? String(sessionSchoolId) : "",
+    schoolId: "",
     studentId: studentId ? String(studentId) : "",
     studentBillId: studentBillId ? String(studentBillId) : "",
     cashCollectionSessionId: cashSessionId ? String(cashSessionId) : "",
@@ -128,11 +129,17 @@ export function PaymentForm({
     e.preventDefault();
     setError(null);
 
+    if (resolvingSchool) {
+      setError("Still looking up your school — try again in a moment.");
+      return;
+    }
+
     const amount = Number(form.cashAmount);
     const errs: Record<string, string | undefined> = {
-      schoolId: /^\d+$/.test(form.schoolId.trim())
-        ? undefined
-        : "Enter the school's numeric id.",
+      schoolId:
+        askForSchoolId && !/^\d+$/.test(form.schoolId.trim())
+          ? "Enter the school's numeric id."
+          : undefined,
       studentId: /^\d+$/.test(form.studentId.trim())
         ? undefined
         : "Find and pick the student this payment is for.",
@@ -147,7 +154,7 @@ export function PaymentForm({
     setSubmitting(true);
     try {
       const body: PaymentRequest = {
-        schoolId: Number(form.schoolId),
+        schoolId: schoolId ?? Number(form.schoolId),
         studentId: Number(form.studentId),
         cashAmount: amount,
         paymentMethod: form.paymentMethod,
@@ -315,7 +322,7 @@ export function PaymentForm({
             hint="The open till this cash was taken in. Required for the session to reconcile."
           />
 
-          {sessionSchoolId ? null : (
+          {askForSchoolId ? (
             <NumericIdField
               label="School id"
               id="pay-school"
@@ -323,9 +330,9 @@ export function PaymentForm({
               onChange={(v) => setForm({ ...form, schoolId: v })}
               required
               error={errors.schoolId}
-              hint="Not present in your sign-in token, so it has to be typed."
+              hint="Your school has no classes, terms or bills yet to read it from, so it has to be typed."
             />
-          )}
+          ) : null}
 
           <Field label="Paid at" htmlFor="pay-at" hint="Defaults to now.">
             <Input
