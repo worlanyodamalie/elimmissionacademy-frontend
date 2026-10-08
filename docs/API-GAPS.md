@@ -375,6 +375,26 @@ field in the UI.
 
 *Table re-derived from the spec 2026-08-20.*
 
+**Run 2026-10-08 against `WOR_9fe69`:**
+
+- **`schoolId`** isn't a claim in the sign-in token, but `tenantId` is, and it
+  equals the school's numeric id (`2`). Every tenant list row carries
+  `schoolId` too (`GET /school/academics/class_levels?size=1` → `2`). The
+  payment and open-session forms now take it from the token, falling back to a
+  list row, and only ask for it in a school with no classes, terms or bills.
+- **`userId`** isn't a claim either (the claims are `sub`, `publicId`, `roles`,
+  `schoolCode`, `tenantId`, `userType`, `iat`, `exp`), so the open-a-till form's
+  "defaults to you" cashier never fills.
+- **`serviceCostId`** is recovered on the bill page by matching the price list
+  against earlier charges (`src/lib/service-cost-ids.ts`). That only helps once
+  a charge exists, and a fresh price returns no numeric id, so the first charge
+  of any price still needs the id typed. Whether bill creation
+  auto-charges mandatory prices (which would break that loop) is unverified:
+  `POST /payments/student-bills {studentId: 2, academicTermId: 4}` — an
+  enrolled student, in their enrolled term, with one mandatory school-wide
+  price — answers a bare **500**. Terms 5 and 6 answer 404
+  `ENROLMENT_NOT_FOUND`, as expected.
+
 ## 1b. `BillLineItemResponse` doesn't say who owes the money — blocking
 
 The response carries `studentBillId` (numeric) and `schoolName`, but no
