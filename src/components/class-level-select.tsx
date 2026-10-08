@@ -26,6 +26,9 @@ type Props = {
   label?: string;
   hint?: string;
   required?: boolean;
+  // Text of the blank option once classes have loaded. Where leaving the
+  // field blank means something (a service cost for every class), say so.
+  placeholder?: string;
 };
 
 export function classLevelLabel(level: ClassLevelLookUpResponse): string {
@@ -41,6 +44,7 @@ export function ClassLevelSelect({
   label = "Class",
   hint,
   required = false,
+  placeholder = "Select a class",
 }: Props) {
   const [classLevels, setClassLevels] = useState<ClassLevelLookUpResponse[]>(
     [],
@@ -103,7 +107,7 @@ export function ClassLevelSelect({
         required={required}
       >
         <option value="">
-          {!loaded ? "Loading classes…" : empty ? "No classes" : "Select a class"}
+          {!loaded ? "Loading classes…" : empty ? "No classes" : placeholder}
         </option>
         {classLevels.map((level) => (
           <option key={level.classLevelId} value={level.classLevelId}>

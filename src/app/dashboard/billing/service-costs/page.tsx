@@ -15,11 +15,11 @@ import {
   Select,
   Textarea,
 } from "@/components/ui";
+import { ClassLevelSelect } from "@/components/class-level-select";
 import { DateInput } from "@/components/date-input";
 import {
   EmptyState,
   Money,
-  NumericIdField,
   Pagination,
 } from "@/components/billing-ui";
 import { ChevronRightIcon } from "@/components/icons";
@@ -35,6 +35,7 @@ import { formatDate, formatEnumLabel } from "@/lib/utils";
 import type {
   ApiError,
   BillingCycle,
+  ClassLevelLookUpResponse,
   Currency,
   ServiceCategory,
   ServiceCostResponse,
@@ -204,7 +205,7 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
   const [form, setForm] = useState({
     serviceCostName: "",
     serviceCostDescription: "",
-    classLevelId: "",
+    classLevel: null as ClassLevelLookUpResponse | null,
     serviceCategory: "SCHOOL_FEES" as ServiceCategory,
     billingCycle: "TERMLY" as BillingCycle,
     amount: "",
@@ -239,10 +240,6 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
         form.effectiveTo && form.effectiveTo <= form.effectiveFrom
           ? "The end date must be after the start date."
           : undefined,
-      classLevelId:
-        form.classLevelId && !/^\d+$/.test(form.classLevelId.trim())
-          ? "Class level id must be a number."
-          : undefined,
     };
     setErrors(errs);
     if (Object.values(errs).some(Boolean)) return;
@@ -254,8 +251,8 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
         ...(form.serviceCostDescription.trim()
           ? { serviceCostDescription: form.serviceCostDescription.trim() }
           : {}),
-        ...(form.classLevelId.trim()
-          ? { classLevelId: Number(form.classLevelId) }
+        ...(form.classLevel
+          ? { classLevelId: form.classLevel.classLevelId }
           : {}),
         serviceCategory: form.serviceCategory,
         billingCycle: form.billingCycle,
@@ -423,13 +420,13 @@ function NewServiceCostCard({ onCreated }: { onCreated: () => void }) {
             />
           </Field>
 
-          <NumericIdField
-            label="Class level id"
-            id="sc-class"
-            value={form.classLevelId}
-            onChange={(v) => setForm({ ...form, classLevelId: v })}
-            error={errors.classLevelId}
-            hint="Optional — leave blank to apply to all class levels."
+          <ClassLevelSelect
+            label="Class level"
+            inputId="sc-class"
+            selected={form.classLevel}
+            onSelect={(classLevel) => setForm({ ...form, classLevel })}
+            placeholder="All class levels"
+            hint="Optional — leave on “All class levels” to price every class."
           />
 
           <Field
