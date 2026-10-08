@@ -360,7 +360,7 @@ has been created yet, that is a closed loop.
 | `academicTermId` | `POST /payments/student-bills` | `AcademicYearResponse.academicTerms[]`, `StudentBillResponse` | **Yes** — the years list carries it |
 | `academicYearId` | `POST /academics/terms` | `AcademicTermResponse`, `StudentBillResponse` | **No** — and this one is a hard blocker; see §8 |
 | `classLevelId` | `POST /payments/service-costs` | `ServiceCostResponse.classLevelId` | **Yes** — `GET /school/academics/class_levels/lookup?query=` (blank query) returns every class with its numeric `classLevelId`; the service-cost form picks from it via `ClassLevelSelect` |
-| `cashierId`, `approvedById` | `POST /cash-sessions`, `/approve` | `SessionResponse.cashierId` | **No** — no staff list (§O3) |
+| `cashierId`, `approvedById` | `POST /cash-sessions`, `/approve` | `SessionResponse.cashierId` | **Yes** — the `id` on `GET /auth/users/lookup` rows (verified 2026-10-08); the rows carry no roles, so the picker can't narrow to cashiers or approvers |
 
 The pattern is consistent: **the create endpoint needs an id that only a
 downstream read can supply.** So several forms can't be built as pickers and
@@ -383,8 +383,14 @@ field in the UI.
   payment and open-session forms now take it from the token, falling back to a
   list row, and only ask for it in a school with no classes, terms or bills.
 - **`userId`** isn't a claim either (the claims are `sub`, `publicId`, `roles`,
-  `schoolCode`, `tenantId`, `userType`, `iat`, `exp`), so the open-a-till form's
-  "defaults to you" cashier never fills.
+  `schoolCode`, `tenantId`, `userType`, `iat`, `exp`), so the old "defaults to
+  you" cashier and approver never filled, and `closedById` is never sent.
+- **`cashierId` / `approvedById`** are the `id` on `GET /auth/users/lookup`
+  rows: the admin's row (`id: 4`) opened, closed and approved a session that
+  came back with the right `cashierName`, and an unknown id (`99999`) answers
+  404 `USER_NOT_FOUND` on both open and approve. Searching the token's `sub`
+  (the email) returns exactly that one row, so both fields are now a
+  `UserLookup` that starts on the signed-in user.
 - **`serviceCostId`** is recovered on the bill page by matching the price list
   against earlier charges (`src/lib/service-cost-ids.ts`). That only helps once
   a charge exists, and a fresh price returns no numeric id, so the first charge
