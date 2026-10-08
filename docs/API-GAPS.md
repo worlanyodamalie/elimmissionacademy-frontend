@@ -384,7 +384,10 @@ field in the UI.
   list row, and only ask for it in a school with no classes, terms or bills.
 - **`userId`** isn't a claim either (the claims are `sub`, `publicId`, `roles`,
   `schoolCode`, `tenantId`, `userType`, `iat`, `exp`), so the old "defaults to
-  you" cashier and approver never filled, and `closedById` is never sent.
+  you" cashier and approver never filled, and `closedById` was never sent.
+  All three are now a `UserLookup` (below); `closedById: 4` was accepted on
+  close. `SessionResponse` has no `closedBy` field, so the closer can't be
+  read back.
 - **`cashierId` / `approvedById`** are the `id` on `GET /auth/users/lookup`
   rows: the admin's row (`id: 4`) opened, closed and approved a session that
   came back with the right `cashierName`, and an unknown id (`99999`) answers
