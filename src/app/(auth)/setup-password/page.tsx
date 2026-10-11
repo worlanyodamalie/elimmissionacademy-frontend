@@ -3,15 +3,23 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
-import { Alert, Button, Card, Field, PasswordInput } from "@/components/ui";
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  Input,
+  PasswordInput,
+} from "@/components/ui";
 import { SchoolCodeCard } from "@/components/school-code-card";
-import { apiRequest, rememberSchoolCode } from "@/lib/api";
+import { apiRequest, readLastSchoolCode, rememberSchoolCode } from "@/lib/api";
 import { useToast } from "@/components/toast";
 import { ROUTES, USERS } from "@/lib/endpoints";
 import { useLinkParams } from "@/lib/use-link-params";
 import {
   hasErrors,
   password as passwordValidator,
+  schoolCode as schoolCodeError,
   validateAll,
 } from "@/lib/validation";
 import type { ApiError } from "@/lib/types";
@@ -27,10 +35,16 @@ export default function SetupPasswordPage() {
 function SetupPasswordForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { token, schoolCode } = useLinkParams({
+  const { token, schoolCode: linkSchoolCode } = useLinkParams({
     token: ["token"],
     schoolCode: ["schoolCode"],
   });
+  // Staff onboarding emails carry only the token, so ask for the school code
+  // when the link doesn't supply it.
+  const askForSchoolCode = !linkSchoolCode;
+  const [schoolCode, setSchoolCode] = useState(
+    () => linkSchoolCode || readLastSchoolCode() || "",
+  );
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -38,11 +52,12 @@ function SetupPasswordForm() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{
+    schoolCode?: string;
     password?: string;
     confirm?: string;
   }>({});
 
-  const linkInvalid = !token || !schoolCode;
+  const linkInvalid = !token;
 
   const mismatch = useMemo(
     () => confirm.length > 0 && password !== confirm,
@@ -55,8 +70,10 @@ function SetupPasswordForm() {
     setError(null);
 
     const errors = validateAll(
-      { password, confirm },
+      { schoolCode, password, confirm },
       {
+        schoolCode: (v) =>
+          !v.trim() ? "School code is required." : schoolCodeError(v),
         password: (v) => (!v ? "Password is required." : passwordValidator(v)),
         confirm: (v) =>
           v === password ? undefined : "Passwords do not match.",
@@ -72,10 +89,11 @@ function SetupPasswordForm() {
         // Token goes in the query string — the body carries only the password.
         body: { newPassword: password },
         query: { token },
-        schoolCode,
+        schoolCode: schoolCode.trim(),
         auth: false,
       });
-      rememberSchoolCode(schoolCode);
+      setSchoolCode(schoolCode.trim());
+      rememberSchoolCode(schoolCode.trim());
       toast({
         title: "Password set",
         description: "Save your school code and sign in to continue.",
@@ -164,12 +182,14 @@ function SetupPasswordForm() {
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Create a password to activate your account.
         </p>
-        <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
-          School code:{" "}
-          <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
-            {schoolCode}
-          </span>
-        </p>
+        {askForSchoolCode ? null : (
+          <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+            School code:{" "}
+            <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
+              {schoolCode}
+            </span>
+          </p>
+        )}
       </div>
 
       {error ? (
@@ -181,6 +201,33 @@ function SetupPasswordForm() {
       ) : null}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        {askForSchoolCode ? (
+          <Field
+            label="School code"
+            htmlFor="schoolCode"
+            required
+            hint={
+              !fieldErrors.schoolCode
+                ? "Your school administrator can tell you this."
+                : undefined
+            }
+            error={fieldErrors.schoolCode}
+          >
+            <Input
+              id="schoolCode"
+              value={schoolCode}
+              onChange={(e) => setSchoolCode(e.target.value)}
+              placeholder="e.g. ELI_cac4d"
+              autoComplete="organization"
+              required
+              autoCapitalize="off"
+              spellCheck={false}
+              autoFocus
+              invalid={!!fieldErrors.schoolCode}
+              aria-invalid={!!fieldErrors.schoolCode || undefined}
+            />
+          </Field>
+        ) : null}
         <Field
           label="Password"
           htmlFor="password"
@@ -201,7 +248,7 @@ function SetupPasswordForm() {
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="new-password"
             required
-            autoFocus
+            autoFocus={!askForSchoolCode}
             invalid={tooShort || !!fieldErrors.password}
             aria-invalid={tooShort || !!fieldErrors.password || undefined}
           />
