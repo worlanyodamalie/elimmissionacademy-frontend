@@ -61,15 +61,6 @@ const SECURITY_HEADERS = [
 // any future third-party asset on these pages.
 const NO_REFERRER = [{ key: "Referrer-Policy", value: "no-referrer" }];
 
-// The backend's onboarding emails link to the frontend at an API-style path
-// rather than the page. Admin invites use the first; teacher, head-teacher and
-// other staff invites use the second (no `/users`, and no schoolCode in the
-// query). Send both to the page; the query string is carried over.
-const EMAILED_SETUP_PASSWORD_PATHS = [
-  "/api/v1/auth/users/setup-password",
-  "/api/v1/auth/setup-password",
-];
-
 const nextConfig: NextConfig = {
   async headers() {
     return [
@@ -78,13 +69,6 @@ const nextConfig: NextConfig = {
       { source: "/setup-password", headers: NO_REFERRER },
       { source: "/reset-password", headers: NO_REFERRER },
     ];
-  },
-  async redirects() {
-    return EMAILED_SETUP_PASSWORD_PATHS.map((source) => ({
-      source,
-      destination: "/setup-password",
-      permanent: false,
-    }));
   },
 };
 
